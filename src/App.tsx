@@ -1,3 +1,4 @@
+import PreferencesSyncProvider from './lib/PreferencesSyncProvider'
 import CardManagerPage from './pages/CardManagerPage'
 import { useLayoutEffect, useRef, useState } from 'react'
 import AccountWorkspace from './lib/AccountWorkspace'
@@ -36,5 +37,5 @@ function ProtectedLayout() {
   const { session, loading } = useAuth()
   if (loading) return <main className="p-12 text-center text-slate-500" role="status">Đang kiểm tra đăng nhập…</main>
   if (!session) return <Navigate to="/" replace/>
-  return <AccountWorkspace key={session.user.id} userId={session.user.id}><AddVocabularyProvider><MeaningReminderProvider><Outlet/></MeaningReminderProvider></AddVocabularyProvider></AccountWorkspace>
+  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><AddVocabularyProvider><MeaningReminderProvider><Outlet/></MeaningReminderProvider></AddVocabularyProvider></PreferencesSyncProvider></AccountWorkspace>
 }

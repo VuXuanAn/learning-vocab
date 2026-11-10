@@ -81,3 +81,15 @@ Lần mở đầu tiên của một kho local trống, ứng dụng tìm snapsho
 Nâng cấp từ database dùng chung `vocab-library`: chỉ chuyển tự động khi cloudMeta ghi nhận đúng user_id và kho mới chưa có dữ liệu. Chỉ chuyển các backup có cùng chủ sở hữu. Database cũ luôn được giữ lại. Dữ liệu cũ chưa xác định chủ không được tự gán cho tài khoản đầu tiên đăng nhập; cần quy trình nhập thủ công riêng nếu muốn sử dụng lại. Hành vi này thay thế mô tả dữ liệu local dùng chung ở phần trước.
 
 Kiểm tra tự động dùng IndexedDB giả lập: tách tài khoản, giữ dữ liệu khi mở lại, migration theo chủ sở hữu, cài đặt riêng, chặn đổi database trong cùng document, tải cloud lần đầu/thử lại và không ghi đè chỉnh sửa local. Cần kiểm thử đăng nhập Google thực tế sau khi cấu hình project.
+
+## Tự động đồng bộ cài đặt tài khoản
+
+Chạy thêm toàn bộ `supabase/migrations/002_user_preferences.sql` trong Supabase SQL Editor. Migration tạo bảng `user_preferences`, RLS riêng từng `auth.uid()` và hàm `save_user_preferences(uuid,jsonb)` kiểm tra đúng user_id trước khi lưu.
+
+Ba tùy chọn trong Cài đặt (bật nhắc ôn, số phút nhắc, tự phát âm) được tải từ Supabase khi mở kho và tự lưu sau thay đổi khoảng 500 ms. Trang Cài đặt hiển thị trạng thái tải/lưu/đã đồng bộ và nút Thử lại nếu lỗi. Mất mạng giữ thay đổi chưa gửi trong localStorage riêng theo tài khoản; thử lại khi có mạng, quay lại tab hoặc mở lại kho. Nếu sửa trong lúc request đang chạy, giữ thay đổi mới rồi gửi tiếp.
+
+RPC chỉ hợp nhất các trường đã sửa để không ghi đè tùy chọn khác vừa được cập nhật từ thiết bị khác. Nếu cùng sửa một trường, lần ghi sau trên server thắng. Đây không phải Realtime: thiết bị khác nhận giá trị mới khi mở kho, quay lại tab hoặc bấm Thử lại.
+
+Snapshot từ vựng vẫn chứa preferences để giữ khả năng xuất/khôi phục. Khi mới mở kho, bảng user_preferences là nguồn ưu tiên sau bước khôi phục snapshot. Nếu người dùng chủ động tải snapshot/khôi phục local, các preferences trong snapshot được áp dụng và đồng bộ như một thay đổi cài đặt. Folder/thẻ/lịch ôn vẫn sao lưu thủ công như trước; tùy chọn đảo mặt riêng từng folder đi cùng dữ liệu folder.
+
+Kiểm tra tự động giả lập load/save/debounce/offline/retry, cập nhật trong lúc request chạy và tách hàng đợi theo tài khoản. Chưa xác minh bảng/RLS trên project thật khi migration chưa được chạy.
