@@ -70,6 +70,11 @@ export function createRowTransport(client: SupabaseClient, userId: string): RowT
       return data
     },
     review: async (value, expected, logs) => {
+      if (!logs.length && expected === 0) {
+        const { data, error } = await client.from('user_card_progress').insert({ user_id: userId, note_id: value.note_id, card_key: value.card_key, due: value.due, fsrs: value.fsrs, last_rating: value.last_rating, review_revision: value.review_revision }).select('*').single()
+        if (error) throw contextualSyncError(error, 'user_card_progress', 'insert')
+        return data
+      }
       const { data, error } = await client.rpc('save_card_review', { p_note_id: value.note_id, p_card_key: value.card_key, p_expected_revision: expected, p_progress: value, p_logs: logs })
       if (error) throw contextualSyncError(error, 'user_card_progress', 'review')
       if (!data?.[0]) throw new Error('Missing review result')

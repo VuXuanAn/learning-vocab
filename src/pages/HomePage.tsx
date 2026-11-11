@@ -26,7 +26,7 @@ export default function HomePage() {
   const count = (id: string) => stats(id).new
   const rows = folderRows(folders ?? [], collapsed)
   function toggle(id: string) { setCollapsed(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next }) }
-  return <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+  return <main className="w-full min-w-0 px-4 py-10 sm:px-6">
     <div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="eyebrow">THƯ VIỆN CÁ NHÂN</p><h1 className="mt-2 text-3xl font-bold">Bộ thẻ</h1><p className="mt-2 text-sm text-slate-500">Chọn một thư mục để bắt đầu ôn tập.</p></div><Button type="button" onClick={() => setAddingFolder(true)}><FolderPlus size={17} />Thêm folder</Button></div>
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Danh sách bộ thẻ">
       <div className="overflow-x-auto"><Table className="w-full min-w-96 border-collapse text-sm"><TableHeader><TableRow className="border-b border-slate-200 text-left"><TableHead className="px-5 py-4 font-semibold">Bộ thẻ</TableHead><TableHead className="w-16 px-2 py-4 text-center">Mới</TableHead><TableHead className="w-16 px-2 py-4 text-center">Học</TableHead><TableHead className="w-20 whitespace-nowrap px-2 py-4 text-center">Đến hạn</TableHead><TableHead className="w-12 px-2"><FolderActions /></TableHead></TableRow></TableHeader><TableBody>

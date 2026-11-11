@@ -318,3 +318,30 @@ test('new folders and their notes created during a merge remain pending instead 
   assert.equal(hasPendingRows(await readLocalRows(f.db)),true)
  }finally{await f.db.delete()}
 })
+
+test('restored schedules without history bootstrap to cloud without fabricating review events',async()=>{
+ const f=fixture()
+ try{
+  await f.db.folders.add(folder())
+  await f.db.notes.add(note())
+  const result=nextReview(undefined,3,new Date('2026-11-11T00:00:00Z'))
+  await f.db.reviews.add({...result.card,id:'n-forward',noteId:'n',lastRating:3,revision:7})
+  await f.cycle()
+  assert.equal(f.cloud.reviews.get('n-forward').review_revision,7)
+  assert.equal(f.cloud.reviews.get('n-forward').due,result.card.due.toISOString())
+  assert.equal(f.cloud.reviewLogs.size,0)
+  assert.deepEqual(f.writes.find(row=>row.table==='reviews').logs,[])
+  const count=f.writes.length
+  await f.cycle()
+  assert.equal(f.writes.length,count)
+ }finally{await f.db.delete()}
+})
+
+test('transport bootstraps imported personal progress directly when no historical logs exist',async()=>{
+ let captured
+ const client={from:table=>{assert.equal(table,'user_card_progress');return {insert:value=>{captured=value;return {select:()=>({single:async()=>({data:{...value,updated_at:'2026-11-11T00:00:00Z'},error:null})})}}}}}
+ const transport=createRowTransport(client,'owner-a')
+ const result=await transport.review({note_id:'n',card_key:'forward',due:'2026-12-01T00:00:00Z',fsrs:{state:2},last_rating:3,review_revision:7},0,[])
+ assert.equal(captured.user_id,'owner-a')
+ assert.equal(result.review_revision,7)
+})

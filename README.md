@@ -203,3 +203,75 @@ Thêm từ, xem và chỉnh sửa dùng popup. Một từ vựng có thể sinh 
 Frontend không còn đọc/ghi snapshot. Cache mới `vocab-rows-v1-account-<user_id>` không nhập dữ liệu cũ. Các thay đổi chỉ đồng bộ từng dòng khi bấm Đồng bộ ở header, giữ pending offline và dùng RPC atomic cho lịch ôn. Cần chạy migration 005 sau 003; xem supabase/README.md.
 
 Lần đầu bấm Đồng bộ ở header có lựa chọn Tải lên Supabase / Tải từ Supabase về máy / Đồng bộ hai chiều. Tải lên gửi dữ liệu local theo từng dòng và giữ dữ liệu khác trên server. Tải về thay local, giữ bản khôi phục trong IndexedDB; menu header cho khôi phục khi cần. Những lần sau nút chính đồng bộ hai chiều.
+
+### Thống kê token Gemini trong Cài đặt
+
+Cài đặt → Sử dụng Gemini hiển thị model, trạng thái cấu hình key, token đầu vào/đầu ra hôm nay và tháng này, số lượt gọi và lỗi/chưa hoàn tất. UI đọc `GET /api/ai/usage`, tự làm mới mỗi 30 giây khi tab hiển thị; endpoint này không gọi Gemini.
+
+Backend ghi nhận `usage` của từng request generate/generate-batch, bao gồm tạo từ liên quan. Token đầu ra gồm candidate + thinking tokens theo Gemini metadata. Request không có usage metadata được đếm riêng, không suy đoán token. Ngày/tháng tính theo Asia/Ho_Chi_Minh. Đây là số liệu chung của model trên backend từ lúc bật thống kê, không bao gồm lịch sử trước đó hoặc request từ ứng dụng/backend khác. Không phải số quota còn lại của Google project.
+
+`server/index.mjs` lưu số đếm vào `server/data/gemini-usage.json` (đã gitignore); chỉ lưu ngày/model/số đếm, không lưu API key, từ vựng, prompt hoặc nội dung phản hồi. Muốn giữ lịch sử khi deploy lại container cần ổ đĩa bền vững cho thư mục này. Đổi API key/project nhưng giữ file sẽ tiếp tục cộng vào số liệu backend/model đó.
+
+Quota thực tế phụ thuộc Google project/model/tier; mở nút Xem hạn mức để đến Google AI Studio và chọn project đúng với key backend. Không cần chạy thêm SQL Supabase. Nếu backend chưa chạy mã mới, khởi động lại backend.
+
+### Import / Export backup JSON
+
+Cài đặt → **Import / Export dữ liệu**. Export toàn bộ kho trên thiết bị hoặc một folder (gồm thư mục con và đường dẫn folder cha). Muốn lấy bản cloud mới nhất, đồng bộ trước khi export. File tối đa 25 MB; các kho lớn có thể xuất riêng từng folder.
+
+Định dạng `vocab-library-backup`, version 1, chứa 5 loại thẻ: basic, reverse, cloze, custom, ai; giữ template/HTML/CSS/cấu hình giọng đọc, tất cả field values, tags/ghi chú, folder và chiều học, liên kết từ liên quan, lịch FSRS, review logs và cài đặt. Hình/âm thanh từ URL không được tải đính kèm, nên vẫn phụ thuộc URL gốc. Không bao gồm API key, session đăng nhập, quyền chia sẻ hay dữ liệu theo dõi usage Gemini.
+
+Import kiểm tra cấu trúc/version, ID trùng, template và required fields, cú pháp cloze, quan hệ folder và tham chiếu lịch ôn/log trước khi ghi. Hiển thị thống kê theo loại thẻ để xác nhận. Có thể giữ lịch ôn/lịch sử hoặc nhập như thẻ mới; áp dụng preferences từ file là tùy chọn tắt mặc định. Hỗ trợ file snapshot JSON version 1 cũ có cùng các trường dữ liệu, không cần trường format.
+
+Mỗi lần import tạo một thư mục gốc mới và ID mới cho folder/template/note/log, cập nhật lại card IDs và các liên kết nội bộ. Bản nhập là dữ liệu cá nhân mới, không kế thừa quyền hoặc danh tính người sở hữu cũ. Không thay thế thẻ có sẵn; nhập cùng file lần nữa tạo bản sao. Liên kết từ trỏ ra ngoài phần được export sẽ không được giữ làm liên kết ID. Không tự suy đoán hợp nhất theo từ vì một từ có thể có nhiều nghĩa/mẫu khác nhau.
+
+Trước khi thêm dữ liệu, lưu backup local vào `syncBackups`, giữ tối đa 3 bản (dùng chung với bản trước lần tải cloud). Việc nhập folder/thẻ/template/lịch/log nằm trong một IndexedDB transaction; lỗi lưu sẽ rollback cả bản nhập. Có thể dùng menu Đồng bộ → Khôi phục bản local trước đó để trở về trạng thái trước import. Không xóa cache trình duyệt nếu cần các bản này. File export tải về là bản backup độc lập với trình duyệt.
+
+Bấm **Đồng bộ** sau import để gửi bản mới lên Supabase. Lịch ôn không có review log được tạo riêng trên cloud, không dựng lịch sử giả. Không cần migration SQL mới. Backup/import cũng dùng khóa đồng bộ theo tài khoản để tránh chạy đồng thời với một lần sync trên các trình duyệt hỗ trợ Web Locks.
+
+Kiểm tra tự động bao gồm round-trip 5 loại thẻ và 7 thẻ sinh ra, HTML/CSS/voice, cloze nhiều nhóm, remap IDs/liên kết, giữ Date FSRS, nhập trùng thành bản sao, lựa chọn preferences/progress, export folder, kiểm tra file lỗi và rollback khi storage thất bại. Chưa kiểm thử file Anki `.apkg` hoặc CSV; chỉ hỗ trợ JSON của ứng dụng.
+
+### Tự động đồng bộ hai chiều
+
+Cơ chế hiện tại thay thế mô tả chỉ đồng bộ thủ công ở các phần trước: khi mở kho đã đăng nhập, ứng dụng tự merge hai chiều; sau thay đổi dữ liệu local chờ khoảng 800 ms để gom lượt gửi; kiểm tra cloud mỗi 30 giây khi tab hiển thị; đồng bộ khi có mạng, quay lại tab và visibilitychange/pagehide. Nút Đồng bộ vẫn cho gửi ngay hoặc chọn hướng upload/download thủ công.
+
+Khi ẩn/đóng tab, controller bắt đầu lượt merge ngay nếu không có lượt đang chạy; nếu đang chạy thì xếp một lượt tiếp theo. Trình duyệt không bảo đảm hoàn tất mạng trong sự kiện đóng trang, nên không cam kết dữ liệu đã lên server ngay lúc đóng. Các thay đổi đã lưu IndexedDB và sync base còn giữ nguyên; lần mở sau sẽ tính phần chưa gửi và tiếp tục merge. Đóng browser/OS đột ngột trước khi thao tác lưu local hoàn tất cũng không thể bảo đảm bằng sự kiện đóng trang. Chỉ trạng thái Đã đồng bộ và không còn pending mới thể hiện lượt gửi/nhận đã hoàn tất.
+
+Các lượt sync được xếp hàng, không chạy chồng; thay đổi trong lúc request đang chạy sẽ có lượt theo sau. Lỗi mạng được thử lại với khoảng chờ tăng từ 10 đến tối đa 60 giây; offline đợi online. Cleanup khi đổi tài khoản/hủy provider ngăn áp dụng kết quả muộn. Web Locks theo tài khoản vẫn bảo vệ sync/import/restore khi trình duyệt hỗ trợ.
+
+Khôi phục backup local cũng tạo thay đổi sẽ tự gửi lên cloud; dialog xác nhận đã nêu rõ điều này. Export JSON vẫn hữu ích như bản backup độc lập. Không cần SQL mới cho cơ chế tự động.
+
+### Nhập đáp án khi ôn tập
+
+Trước khi lật thẻ, có ô nhập để luyện nhớ chủ động: AI/semantic template và thẻ cơ bản chiều thường nhập nghĩa; chiều đảo nhập từ/cụm từ. Enter hoặc Kiểm tra đối chiếu với đáp án đã lưu, mở mặt đáp án và mở 4 mức đánh giá. Không tự chấm mức FSRS hay gọi AI. Có thể bỏ qua ô nhập và lật bằng nút/Space như trước.
+
+So nghĩa cho phép một nghĩa riêng phân tách bằng dấu phẩy/chấm phẩy/xuống dòng, bỏ khác biệt chữ hoa và dấu câu; chưa hiểu các cách diễn đạt đồng nghĩa ngoài đáp án. So từ giữ đúng từ/cụm từ, bỏ khác biệt chữ hoa/khoảng trắng và chuẩn hóa dấu nháy. Cloze chiều thường nhập các phần bị ẩn của cùng nhóm, ngăn cách bằng dấu ;. Không suy đoán ô trả lời cho template custom thiếu trường từ/nghĩa hoặc cloze đảo chiều.
+
+Khi đang gõ, phím Space/S/1–4 giữ vai trò nhập liệu. Sau khi kiểm tra, bỏ focus input để tiếp tục dùng phím tắt đánh giá. Ô nhập và kết quả được làm mới khi chuyển lượt hoặc lưu sửa thẻ.
+
+### Speaking / Vocab / Reading
+
+Header sau đăng nhập có 3 khu vực. Speaking hỗ trợ đoạn văn, giọng đọc mẫu trình duyệt, ghi âm/tải file, lưu local, lưu file riêng tư lên Google Drive và lịch sử nghe lại. Vocab giữ UI từ vựng cũ; Reading là trang Sắp có. Xem phần Speaking và Google Drive trong `supabase/README.md` để bật API, cấp scope drive.file, thêm redirect /speaking và chạy migration 007.
+
+### Sidebar và khu vực Shadowing
+
+Điều hướng chính được chuyển sang sidebar bên trái: Speaking (Danh sách bài shadowing `/speaking`, Luyện shadowing `/speaking/practice`), Vocab (Bộ thẻ, Ôn tập, Quản lý thẻ, Thêm từ), Reading và Cài đặt. Nhóm Speaking/Vocab thu gọn/mở rộng được; màn hình nhỏ mở sidebar bằng nút menu. Header giữ tài khoản và nút đồng bộ trong khu vực Vocab.
+
+Trang danh sách hiển thị bản ghi cũ, tìm kiếm tên/nội dung, nghe lại, lưu Drive và Luyện lại. Luyện lại chép tên/đoạn văn vào nháp rồi mở trang luyện. Trang luyện chỉ có form luyện và bản ghi vừa tạo để nghe/lưu, không hiển thị toàn bộ lịch sử.
+
+Kết nối Google Drive chuyển vào Cài đặt → Google Drive. Callback frontend sau cấp quyền là `/settings` (cần cho phép URL này trong Supabase Redirect URLs). Speaking chỉ dẫn tới Cài đặt khi cần cấp quyền lại. Không cần schema/SQL mới cho thay đổi bố cục này.
+
+### Shadowing theo folder
+
+Speaking hiện có thư mục riêng: tạo/đổi tên, lọc bài và chuyển bài giữa thư mục. Bài học được lưu độc lập với bản ghi; mỗi bài có nhiều lần ghi âm. Khi luyện, chọn folder trước và có thể bấm Lưu bài học ngay cả khi chưa ghi âm.
+
+Chạy migration `008_shadowing_library.sql` sau 007. Schema đã chuẩn bị thành viên viewer/reviewer, lời mời, review và comment có mốc audio cho giai đoạn tiếp theo. Xem `supabase/SHADOWING.md` để biết quan hệ bảng, RLS và phần cấp quyền Drive riêng cần triển khai khi làm invite/reviewer.
+
+### AI review bản ghi shadowing
+
+Sau khi Dừng ghi âm hoặc tải file, thẻ bản ghi có nút **AI review** bên dưới phần nghe lại. Danh sách bài cũ → mở Các lần ghi âm cũng có nút này. Một dòng hướng dẫn trên trang Luyện shadowing giải thích vị trí nút. Chỉ khi bấm nút mới gửi audio và đoạn văn gốc tới Gemini; dùng bản audio local trước, nếu chỉ còn file Drive thì tải riêng bằng token Drive trên trình duyệt. Không gửi token Drive cho backend/Gemini.
+
+Endpoint `POST /api/ai/review-speaking` nhận audio base64 tối đa 10 MB và đoạn văn tối đa 12.000 ký tự. JSON parser riêng 15 MB, vẫn dùng giới hạn lượt gọi /api/ai. Gemini nhận bytes âm thanh thật qua inlineData cùng reference text, dùng GEMINI_API_KEY/GEMINI_MODEL hiện tại. Một request trả transcript, nhận xét tiếng Việt, điểm coaching tham khảo (phát âm/trôi chảy/đọc đầy đủ), lỗi nghe được và gợi ý luyện. Điểm null khi không đánh giá được; audio im lặng/không thể xác minh không có điểm. Không tuyên bố thang IELTS/âm vị chuẩn hóa hoặc so ngữ điệu với audio mẫu khi chỉ có text. Các lượt review được cộng trong thống kê Gemini.
+
+Kết quả lưu cùng bản ghi trên IndexedDB. Chạy `009_speaking_ai_review.sql` để thêm cột JSON ai_review lên speaking_recordings. Nếu bản ghi đã được lưu cloud, review được cập nhật ngay; nếu chưa thì gửi kèm lần Lưu lên Drive/Lưu lịch sử sau. Khi lỗi cloud, review local vẫn giữ, có thông báo thử lại. Human review trong shadowing_reviews vẫn tách riêng. Chưa kiểm thử với bản ghi giọng thật trên Google, các test dùng transport/audio giả lập và kiểm tra payload/schema/RLS bằng PostgreSQL nhúng.
+
+AI review schema compatibility: chỉ gửi cấu trúc JSON gọn (object/properties/required/array/enum/nullable type array) tới Gemini; các giới hạn chuỗi/mảng/điểm vẫn được Zod kiểm tra ở backend sau generation. Kiểm tra live bằng WAV im lặng tái hiện full schema 400 INVALID_ARGUMENT; schema gọn nhận 503 UNAVAILABLE do model quá tải, nên chưa xác minh được review giọng thật thành công. Không tự chuyển model hoặc gửi lại request chấm khi gặp 503; UI hiển thị lỗi quá tải để người dùng chủ động thử lại.

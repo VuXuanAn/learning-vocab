@@ -1,3 +1,5 @@
+import TypedAnswer from '../lib/TypedAnswer'
+import { typedTarget } from '../lib/typed-answer'
 import LinkedCardDialog from '../lib/LinkedCardDialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import NoteEditor from '../lib/NoteEditor'
@@ -81,6 +83,7 @@ function ReviewContent({ folderId }: { folderId: string }) {
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
   const [session, setSession] = useState<Session | null>(null)
   const [revealed, setRevealed] = useState(false)
+  const [typedRevision, setTypedRevision] = useState(0)
   const [editingBusy, setEditingBusy] = useState(false)
   const [editing, setEditing] = useState<{note: Note; cardId: string} | null>(null)
   const [unlockedTurn, setUnlockedTurn] = useState('')
@@ -105,6 +108,7 @@ function ReviewContent({ folderId }: { folderId: string }) {
   const nextUpcoming = all.map(candidate => records.get(candidate.card.id)?.due.getTime()).filter((due): due is number => due !== undefined && due > now).sort((a,b) => a-b)[0]
   const record = item ? records.get(item.card.id) : undefined
   const reversed = item ? reversedFor(item.note.folderId) : false
+  const answerTarget = item ? typedTarget(item.note, item.card, reversed) : null
   const template = item?.note.template
   const speechField = template?.fields.find(field => field.id === template.speech?.fieldId)
   const speechText = speechField ? item?.note.values?.[speechField.name] ?? '' : !template && item?.note.kind !== 'cloze' ? item?.note.front ?? '' : ''
@@ -141,8 +145,8 @@ function ReviewContent({ folderId }: { folderId: string }) {
     return () => window.removeEventListener('keydown', keydown)
   })
   const fullscreenButton = <button type="button" className="secondary h-10 w-40 shrink-0 whitespace-nowrap" aria-pressed={focusMode} onClick={() => void toggleFullscreen()}>{focusMode ? <Minimize size={17} /> : <Maximize size={17} />}{focusMode ? 'Thu nhỏ (Esc)' : 'Toàn màn hình'}</button>
-  return <main ref={studyRoot} tabIndex={-1} data-focus-mode={focusMode ? 'true' : undefined} className={focusMode ? 'fixed inset-0 z-40 flex flex-col overflow-y-auto bg-[#f6f8f7] px-4 py-20 sm:px-10' : 'mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8'}>
-    <div className={focusMode ? 'mx-auto my-auto w-full max-w-5xl shrink-0' : ''}>
+  return <main ref={studyRoot} tabIndex={-1} data-focus-mode={focusMode ? 'true' : undefined} className={focusMode ? 'fixed inset-0 z-40 flex flex-col overflow-y-auto bg-[#f6f8f7] px-4 py-20 sm:px-10' : 'w-full min-w-0 px-4 py-6 sm:px-6 sm:py-8'}>
+    <div className={focusMode ? 'mx-auto my-auto w-full shrink-0' : ''}>
     {focusMode && !session && <div className="fixed right-4 top-4 z-50 sm:right-8">{fullscreenButton}</div>}
     <Breadcrumb aria-label="Đường dẫn ôn tập" className={focusMode ? 'hidden' : 'mb-4'}><BreadcrumbList><BreadcrumbItem><BreadcrumbLink render={<Link to="/folders" />}>Bộ thẻ</BreadcrumbLink></BreadcrumbItem>{path.map(folder => <Fragment key={folder.id}><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbLink render={<Link to={`/review?folder=${encodeURIComponent(folder.id)}`} />}>{folder.name}</BreadcrumbLink></BreadcrumbItem></Fragment>)}<BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>Ôn tập</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb>
     <div className={focusMode || session ? 'sr-only' : 'flex flex-wrap items-center justify-between gap-4'}><h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Ôn tập từ vựng</h1>{!focusMode && !session && fullscreenButton}</div>
@@ -155,6 +159,7 @@ function ReviewContent({ folderId }: { folderId: string }) {
           {item.note.kind === 'ai' ? <AIVocabularyCard note={item.note} revealed={revealed} reversed={reversed} autoVoice={autoVoice}/> : template?.format === 'html' ? <div className="p-4"><CardHtml template={template} content={revealed ? item.card.back : item.card.front} title={revealed ? 'Đáp án ôn tập' : 'Câu hỏi ôn tập'} /></div> : <div className="flex min-h-80 flex-col items-center justify-center p-8 text-center" style={template ? { textAlign: template.align, color: template.color, fontSize: template.fontSize } : undefined}><p className="w-full whitespace-pre-wrap break-words text-3xl font-semibold">{item.card.front}</p>{revealed && <p className="mt-7 w-full whitespace-pre-wrap break-words border-t border-slate-200 pt-7 text-xl text-emerald-800">{item.card.back}</p>}</div>}
           {revealed && item.card.extra && <p className="whitespace-pre-wrap break-words px-8 pb-6 text-sm leading-7 text-slate-500">{item.card.extra}</p>}
           {item.note.kind !== 'ai' && speechText.trim() && (!reversed || revealed) && <div className="px-6 pb-5"><SpeakButton studyShortcut text={speechText} lang={template?.speech?.lang} rate={template?.speech?.rate} autoPlay={autoVoice} /></div>}
+          {answerTarget && <TypedAnswer key={reviewTurn + ':' + typedRevision + ':' + answerTarget.kind + ':' + answerTarget.expected} target={answerTarget} revealed={revealed} disabled={saving || !!editing} onReveal={() => {setUnlockedTurn(reviewTurn);setRevealed(true)}}/>}
         </div>
         <div className="border-t border-slate-100 bg-slate-50 p-5">{!hasSeenAnswer ? <button type="button" aria-keyshortcuts="Space" className="primary w-full" onClick={flipCard}>Hiện đáp án <kbd className="ml-2 rounded border border-white/40 px-1.5 text-xs">Space</kbd></button> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{reviewGrades.map(({ grade, label, color }) => <button key={grade} type="button" aria-keyshortcuts={String(grade)} disabled={saving} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${color}`} onClick={() => void answer(grade)}><kbd className="mr-2 rounded border border-current/20 px-1.5 text-xs">{grade}</kbd>{label}<span className="mt-1 block text-xs font-normal">{formatInterval(nextReview(record, grade, new Date(now)).card.due, now)}</span></button>)}</div>}</div>
       </article>}
@@ -162,7 +167,7 @@ function ReviewContent({ folderId }: { folderId: string }) {
     </section>}
 
     </div>
-    <Dialog open={!!editing} onOpenChange={open => { if (!open && !editingBusy) setEditing(null) }}><DialogContent portalContainer={studyRoot} showCloseButton={!editingBusy} className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl"><DialogHeader className="border-b px-6 py-5 pr-12"><DialogTitle>Chỉnh sửa từ vựng</DialogTitle><DialogDescription>Lưu nội dung và tiếp tục học. Lịch ôn hiện tại được giữ nguyên.</DialogDescription></DialogHeader>{editing && <NoteEditor key={editing.note.id} note={editing.note} onBusy={setEditingBusy} onClose={saved => { setEditing(null); if (saved) { setRevealed(false); setUnlockedTurn('') } }}/>}</DialogContent></Dialog>
+    <Dialog open={!!editing} onOpenChange={open => { if (!open && !editingBusy) setEditing(null) }}><DialogContent portalContainer={studyRoot} showCloseButton={!editingBusy} className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl"><DialogHeader className="border-b px-6 py-5 pr-12"><DialogTitle>Chỉnh sửa từ vựng</DialogTitle><DialogDescription>Lưu nội dung và tiếp tục học. Lịch ôn hiện tại được giữ nguyên.</DialogDescription></DialogHeader>{editing && <NoteEditor key={editing.note.id} note={editing.note} onBusy={setEditingBusy} onClose={saved => { setEditing(null); if (saved) { setRevealed(false); setUnlockedTurn(''); setTypedRevision(value => value + 1) } }}/>}</DialogContent></Dialog>
     <LinkedCardDialog portalContainer={studyRoot}/>
   </main>
 }

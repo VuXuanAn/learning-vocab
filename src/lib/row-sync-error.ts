@@ -3,6 +3,7 @@ export function contextualSyncError(error: { code?: string; message?: string }, 
 }
 export function rowSyncErrorMessage(error: unknown) {
   const detail = error as { code?: string; table?: string; operation?: string }
+  if (detail?.code === 'OFFLINE') return 'Đang mất mạng. Dữ liệu được giữ trên máy và sẽ tự đồng bộ khi kết nối trở lại.'
   if (['42P01', 'PGRST205', 'PGRST202', '42883', '42703'].includes(detail?.code ?? '')) return 'Thiếu bảng hoặc hàm đồng bộ. Hãy chạy migrations 002, 003 và 005 trên Supabase (bỏ qua file đã chạy).'
   if (detail?.code === '42501' && detail.table === 'folders' && detail.operation === 'insert') return 'Supabase chặn tạo folder. Hãy chạy file 006_fix_folder_insert_rls.sql rồi bấm Đồng bộ lại ở header. Folder đang tạo vẫn được giữ trên máy.'
   if (detail?.code === 'LOCAL_CHANGED_DURING_DOWNLOAD') return 'Dữ liệu trên máy vừa thay đổi trong lúc tải. Chưa thay dữ liệu local; hãy hoàn tất chỉnh sửa rồi tải lại.'

@@ -1,3 +1,5 @@
+import type { ShadowingFolder, ShadowingLesson } from './shadowing-types'
+import type { SpeakingRecording } from './speaking'
 import type { ReviewRecord } from './review'
 import type { SavedReviewLog } from './review-storage'
 import Dexie, { type Table } from 'dexie'
@@ -7,6 +9,9 @@ import type { Note } from './cards'
 import type { SyncedRow } from './row-codec'
 
 export class VocabDatabase extends Dexie {
+  shadowingFolders!: Table<ShadowingFolder, string>
+  shadowingLessons!: Table<ShadowingLesson, string>
+  speakingRecordings!: Table<SpeakingRecording, string>
   syncRows!: Table<SyncedRow, string>
   syncMeta!: Table<{ id: string; lastSyncAt: string; mode: string }, string>
   syncBackups!: Table<{ id: string; createdAt: string; tables: Record<string, unknown[]>; bases: SyncedRow[] }, string>
@@ -24,6 +29,8 @@ export class VocabDatabase extends Dexie {
       reviewLogs: 'id, cardId, noteId', syncRows: 'key, table, id',
     })
     this.version(2).stores({ syncMeta: 'id', syncBackups: 'id, createdAt' })
+    this.version(3).stores({ speakingRecordings: 'id, createdAt, driveFileId' })
+    this.version(4).stores({ speakingRecordings: 'id, createdAt, driveFileId, lessonId', shadowingFolders: 'id, ownerId, nameKey, createdAt', shadowingLessons: 'id, ownerId, folderId, createdAt' })
   }
 }
 export let db = new VocabDatabase()

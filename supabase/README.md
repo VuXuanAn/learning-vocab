@@ -70,3 +70,27 @@ npm run test:server
 ```
 
 Kiểm thử dùng IndexedDB/transport giả lập: ghi từng dòng, phân trang và cache metadata, offline/reopen, xóa mềm, thu hồi quyền, chỉnh sửa trong lúc gửi, hợp nhất trường và đồng bộ lịch ôn. Migration 005 được kiểm tra trên PostgreSQL nhúng về transaction, idempotency, revision và RLS; chưa xác minh project Supabase thật bằng phiên đăng nhập của bạn.
+
+## Speaking và Google Drive
+
+Sau đăng nhập, header có Speaking / Vocab / Reading. Vocab giữ folder, quản lý thẻ và ôn tập hiện tại; Reading là trang Sắp có. `/speaking` yêu cầu đăng nhập như Vocab.
+
+### Thiết lập dịch vụ
+
+1. Trong Google Cloud project đang chứa OAuth Client, mở APIs & Services → Library → Google Drive API → Enable. Có thể mở https://console.cloud.google.com/apis/library/drive.googleapis.com rồi chọn đúng project.
+2. Google Auth Platform → Data Access → Add or remove scopes → thêm `https://www.googleapis.com/auth/drive.file`. Giữ email của bạn trong Audience → Test users nếu OAuth đang ở Testing. Không xin drive/drive.readonly toàn bộ Drive.
+3. Supabase Authentication → URL Configuration → Redirect URLs: thêm `http://localhost:5173/speaking`, hoặc origin production thực tế + `/speaking`. Google OAuth Client vẫn dùng callback Supabase `https://<project-ref>.supabase.co/auth/v1/callback`; không thay callback đó bằng URL frontend.
+4. Chạy toàn bộ `supabase/migrations/007_speaking_recordings.sql` trong SQL Editor. Bảng này chỉ chứa metadata và có RLS theo user_id. Không cần Google API key mới, Client Secret mới trong frontend hoặc public hóa file Drive.
+5. Mở Speaking → Kết nối Google Drive → chọn cùng tài khoản Google và cấp quyền. Quyền được xin riêng khi bấm kết nối; đăng nhập thường không yêu cầu quyền Drive.
+
+### Sử dụng
+
+Dán đoạn văn, đặt tên bài, nghe mẫu bằng giọng đọc trình duyệt; ghi âm tối đa 5 phút rồi Dừng và lưu hoặc tải file audio tối đa 20 MB. Bản đã ghi xong được giữ trong IndexedDB riêng theo tài khoản. Nháp tên/đoạn văn giữ riêng trong localStorage để không mất khi redirect cấp quyền. Cần HTTPS hoặc localhost để truy cập micro. Đang ghi mà rời trang sẽ dừng micro; hãy Dừng và lưu trước khi rời trang.
+
+Nghe lại bản local không cần Drive. Bấm Lưu lên Drive: tạo thư mục riêng tư `Vocab Library - Speaking`, dùng resumable upload, gắn appProperties/recordingId để retry có thể tìm file cũ. Sau khi Drive xác nhận file, giữ ID trên máy rồi lưu metadata vào Supabase. Nếu bước Supabase lỗi, bản âm thanh vẫn ở Drive và trên máy; bấm Lưu lịch sử để retry, không upload lại file. Các file không được chia sẻ công khai.
+
+Lịch sử tải tối đa 500 bản gần nhất trên Supabase và hợp với bản local. Thiết bị khác đăng nhập cùng tài khoản, kết nối Drive rồi bấm Nghe lại: tải file bằng Drive API có Authorization, tạo blob URL tạm và phát bằng audio controls. Có nút Mở Drive để nghe bằng Google Drive trực tiếp. Phiên bản hiện tại dùng access token Google từ Supabase OAuth; khi token hết hạn/mất hoặc quyền bị từ chối cần Kết nối lại Drive. Không lưu provider token/refresh token vào bảng lịch sử; chưa có backend refresh token tự động.
+
+CSP backend đã cho phép Google Drive API và phát blob audio. Bản ghi/metadata chưa tích hợp vào export JSON từ vựng hoặc row-sync Vocab; file âm thanh nằm ở Drive và bảng speaking_recordings riêng. Chưa có chức năng chấm điểm phát âm/Gemini/Azure trong tab này.
+
+Kiểm tra tự động giả lập consent config, định dạng audio, resumable upload, file private, retry tránh trùng, lỗi quyền/token, chặn upload host lạ, phát file private và nâng schema DB không mất dữ liệu cũ. Chưa thực hiện OAuth/Drive thật hoặc ghi âm phần cứng trong môi trường kiểm thử.

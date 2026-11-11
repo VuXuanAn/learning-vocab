@@ -1,0 +1,2 @@
+﻿import { BookOpenText } from 'lucide-react'
+export default function ReadingPage(){return <main className="w-full min-w-0 px-6 py-12"><div className="panel px-6 py-20 text-center"><BookOpenText size={42} className="mx-auto text-emerald-700"/><h1 className="mt-5 text-3xl font-bold">Reading</h1><p className="mt-3 text-slate-500">Không gian luyện đọc đang được chuẩn bị.</p><span className="mt-5 inline-block rounded-full bg-emerald-50 px-4 py-1.5 text-xs font-medium text-emerald-700">Sắp có</span></div></main>}

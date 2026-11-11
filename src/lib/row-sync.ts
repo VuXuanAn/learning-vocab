@@ -77,6 +77,10 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
       return value.cardId === id && !remote.reviewLogs.has(value.id)
     })
     if (!pendingLogs.length) {
+      if (!remote.reviews.has(id) && !base.has(key('reviews', id))) {
+        const saved = await transport.review(encodeRow('reviews', row), 0, [])
+        remote.reviews.set(id, saved)
+      }
       if (remote.reviews.has(id)) pushed.add(key('reviews', id))
       continue
     }
