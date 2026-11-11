@@ -1,11 +1,13 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Volume2, ListPlus } from 'lucide-react'
+import { toast } from 'sonner'
+import { addCachedWord } from './vocabulary-cache'
 import { useAddVocabulary } from './AddVocabularyDialog'
 
 interface SelectionMenu { text:string; left:number; top:number }
-const excluded='input,textarea,select,button,a,[contenteditable="true"],[role="textbox"],[role="dialog"],[data-app-sidebar],header,[data-selection-menu]'
+const excluded='input,textarea,select,button,[contenteditable="true"],[role="textbox"],[role="dialog"],[data-app-sidebar],header,[data-selection-menu]'
 export default function SelectionVocabularyMenu(){
  const addVocabulary=useAddVocabulary()
  const location=useLocation()
@@ -25,7 +27,7 @@ export default function SelectionVocabularyMenu(){
    if(!text||text.length>200||!/[\p{L}\p{N}]/u.test(text)){setMenu(null);return}
    const rect=range.getBoundingClientRect()
    if(!rect.width&&!rect.height){setMenu(null);return}
-   const width=190,height=40,gap=8
+   const width=220,height=140,gap=8
    const left=Math.max(gap,Math.min(rect.left+rect.width/2-width/2,window.innerWidth-width-gap))
    const top=rect.bottom+gap+height<window.innerHeight?rect.bottom+gap:Math.max(gap,rect.top-height-gap)
    activation.current=false
@@ -42,16 +44,24 @@ export default function SelectionVocabularyMenu(){
   return()=>{clearTimeout(timer);document.removeEventListener('selectionchange',schedule);document.removeEventListener('pointerup',schedule);document.removeEventListener('keyup',keyboard);window.removeEventListener('scroll',hide,true);window.removeEventListener('resize',hide)}
  },[])
  useEffect(()=>setMenu(null),[location.key])
- function activate(){
+ function activate(action:'add'|'speak'|'cache'){
   if(!menu||activation.current)return
   activation.current=true
   // Capture and open before focus/selection changes can remove the floating button.
   const text=menu.text
-  addVocabulary(undefined,text)
+  if(action==='add')addVocabulary(undefined,text)
+  else if(action==='cache')void addCachedWord(text).then(added=>toast[added?'success':'info'](added?'Đã thêm vào cache từ vựng.':'Từ này đã có trong cache.')).catch(error=>toast.error(error instanceof Error?error.message:'Không lưu được cache.'))
+  else if('speechSynthesis' in window&&'SpeechSynthesisUtterance' in window){
+   window.speechSynthesis.cancel()
+   const voice=new SpeechSynthesisUtterance(text);voice.lang='en-US';voice.rate=1
+   voice.onerror=event=>{if(!['canceled','interrupted'].includes(event.error))toast.error('Chưa phát được âm thanh. Hãy thử lại.')}
+   window.speechSynthesis.speak(voice)
+  }
   setMenu(null)
   window.getSelection()?.removeAllRanges()
  }
  if(!menu)return null
  const portal=document.fullscreenElement??document.body
- return createPortal(<button data-selection-menu type="button" title={'Thêm từ vựng: '+menu.text} aria-label={'Thêm từ vựng: '+menu.text} style={{left:menu.left,top:menu.top,width:190}} className="fixed z-[80] flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-600 bg-emerald-700 px-3 text-sm font-medium text-white shadow-lg hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600" onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();activate()}} onClick={event=>{event.preventDefault();event.stopPropagation();activate()}}><Plus size={16}/>Thêm từ vựng</button>,portal)
+ const actions=[{id:'add',label:'Thêm từ vựng',icon:Plus},{id:'speak',label:'Phát âm',icon:Volume2},{id:'cache',label:'Thêm vào cache',icon:ListPlus}] as const
+ return createPortal(<div data-selection-menu role="group" aria-label={'Thao tác với: '+menu.text} style={{left:menu.left,top:menu.top,width:220,maxWidth:'calc(100vw - 16px)'}} className="fixed z-[80] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-xl shadow-slate-900/15">{actions.map(action=><button key={action.id} type="button" disabled={action.id==='speak'&&!('speechSynthesis' in window&&'SpeechSynthesisUtterance' in window)} className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium transition hover:bg-emerald-50 hover:text-emerald-800 focus-visible:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-600" onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();activate(action.id)}} onClick={event=>{event.preventDefault();event.stopPropagation();activate(action.id)}}><action.icon size={16} className="shrink-0 text-emerald-700"/>{action.label}</button>)}</div>,portal)
 }

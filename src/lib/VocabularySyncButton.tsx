@@ -19,12 +19,12 @@ export default function VocabularySyncButton() {
   if (!ready) return null
   const busy = status.phase === 'syncing' || restoring
   const statusLabel = busy ? 'Đang đồng bộ' : status.phase === 'error' ? 'Đồng bộ chưa thành công' : pending ? 'Có thay đổi chưa gửi' : status.phase === 'saved' ? 'Đã đồng bộ' : 'Dữ liệu lưu trên máy'
-  const syncTitle = 'Tự động đồng bộ hai chiều · ' + statusLabel + (lastSyncAt ? ' · Lần gần nhất: ' + new Date(lastSyncAt).toLocaleString('vi-VN') : '')
+  const syncTitle = 'Đồng bộ thủ công · ' + statusLabel + (lastSyncAt ? ' · Lần gần nhất: ' + new Date(lastSyncAt).toLocaleString('vi-VN') : '')
   function choose(next: RowSyncMode | 'restore') { setMode(next); setOpen(true) }
   async function confirm() {
     if (mode !== 'restore') { setOpen(false); sync(mode); return }
     setRestoring(true)
-    try { await restore(); setOpen(false); toast.success('Đã khôi phục dữ liệu local. Các thay đổi sẽ tự đồng bộ lên server.') }
+    try { await restore(); setOpen(false); toast.success('Đã khôi phục dữ liệu local. Bấm Đồng bộ để gửi lên server.') }
     catch { toast.error('Không thể khôi phục dữ liệu local.') }
     finally { setRestoring(false) }
   }
@@ -41,7 +41,7 @@ export default function VocabularySyncButton() {
       {canRestore && <><DropdownMenuSeparator/><DropdownMenuItem className="gap-2.5 rounded-lg px-3 py-2.5" onClick={() => choose('restore')}><History size={16}/>Khôi phục bản local trước đó</DropdownMenuItem></>}
     </DropdownMenuContent></DropdownMenu>
     <span role="status" className="sr-only">{statusLabel}</span>
-  </div><Dialog open={open} onOpenChange={value => { if (!restoring) setOpen(value) }}><DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>{mode === 'restore' ? 'Khôi phục dữ liệu trên máy' : firstSync ? 'Đồng bộ lần đầu' : 'Chọn cách đồng bộ'}</DialogTitle><DialogDescription>{mode === 'restore' ? 'Thay dữ liệu local hiện tại bằng bản được giữ trước khi tải cloud hoặc import gần nhất. Các thay đổi sau khôi phục sẽ tự đồng bộ với Supabase.' : 'Ứng dụng tự đồng bộ hai chiều. Bạn có thể chọn một hướng thủ công cho lần đồng bộ này.'}</DialogDescription></DialogHeader>
+  </div><Dialog open={open} onOpenChange={value => { if (!restoring) setOpen(value) }}><DialogContent className="sm:max-w-xl"><DialogHeader><DialogTitle>{mode === 'restore' ? 'Khôi phục dữ liệu trên máy' : firstSync ? 'Đồng bộ lần đầu' : 'Chọn cách đồng bộ'}</DialogTitle><DialogDescription>{mode === 'restore' ? 'Thay dữ liệu local hiện tại bằng bản được giữ trước khi tải cloud hoặc import gần nhất. Bấm Đồng bộ sau khi khôi phục để gửi thay đổi lên Supabase.' : 'Thay đổi được lưu trên thiết bị. Chỉ gửi và nhận dữ liệu khi bạn bấm Đồng bộ. Chọn cách đồng bộ cho lần này.'}</DialogDescription></DialogHeader>
     {mode !== 'restore' && <div role="radiogroup" aria-label="Hướng đồng bộ" className="space-y-3">{modes.map(item => <label key={item.mode} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 ${mode === item.mode ? 'border-emerald-600 bg-emerald-50' : 'border-slate-200'}`}><input type="radio" name="sync-mode" value={item.mode} checked={mode === item.mode} onChange={() => setMode(item.mode)} className="mt-1"/><span><span className="block text-sm font-semibold">{item.label}</span><span className="mt-1 block text-sm font-normal leading-6 text-slate-500">{item.description}</span></span></label>)}</div>}
     <DialogFooter><Button type="button" variant="outline" disabled={restoring} onClick={() => setOpen(false)}>Hủy</Button><Button type="button" disabled={busy} onClick={() => void confirm()}>{mode === 'restore' ? 'Khôi phục local' : modes.find(item => item.mode === mode)?.label}</Button></DialogFooter>
   </DialogContent></Dialog></>

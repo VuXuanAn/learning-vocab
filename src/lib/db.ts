@@ -1,3 +1,4 @@
+import type { CachedVocabulary } from './vocabulary-cache'
 import type { ReadingFolder, ReadingArticle, ReadingStudyNote } from './reading-types'
 import type { ShadowingFolder, ShadowingLesson } from './shadowing-types'
 import type { SpeakingRecording } from './speaking'
@@ -10,6 +11,7 @@ import type { Note } from './cards'
 import type { SyncedRow } from './row-codec'
 
 export class VocabDatabase extends Dexie {
+  vocabularyCache!: Table<CachedVocabulary, string>
   readingStudyNotes!: Table<ReadingStudyNote, string>
   readingFolders!: Table<ReadingFolder, string>
   readingArticles!: Table<ReadingArticle, string>
@@ -42,6 +44,7 @@ export class VocabDatabase extends Dexie {
         await tx.table('readingStudyNotes').put({id:article.id,ownerId:article.ownerId,articleId:article.id,type:'other',title:'Ghi chú cũ',content:article.note,sourceQuote:'',createdAt:article.createdAt,updatedAt:article.updatedAt,deletedAt:article.deletedAt,metadataSynced:false})
       }
     })
+    this.version(7).stores({ vocabularyCache: 'key, createdAt' })
   }
 }
 export let db = new VocabDatabase()

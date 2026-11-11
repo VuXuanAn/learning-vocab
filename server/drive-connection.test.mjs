@@ -37,3 +37,40 @@ test('authorization failure invalidates shared state without rechecking on navig
  await store.getState().initialize('a','fresh-token')
  assert.equal(calls,2);assert.equal(store.getState().ready,true)
 })
+
+test('Supabase session refresh without a provider token preserves the validated Drive token',async()=>{
+ let calls=0
+ const store=createDriveConnectionStore(async()=>{calls++})
+ await store.getState().initialize('user','drive-token')
+ await store.getState().initialize('user','')
+ assert.equal(calls,1);assert.equal(store.getState().ready,true);assert.equal(store.getState().accessToken,'drive-token')
+ store.getState().invalidate('Expired')
+ assert.equal(store.getState().ready,false);assert.equal(store.getState().accessToken,'')
+})
+test('a new login token lacking Drive scope does not overwrite the validated token',async()=>{
+ const store=createDriveConnectionStore(async token=>{if(token==='login-only')throw new Error('Missing scope [INSUFFICIENT_SCOPE]')})
+ await store.getState().initialize('user','drive-token')
+ await store.getState().initialize('user','login-only')
+ assert.equal(store.getState().ready,true);assert.equal(store.getState().accessToken,'drive-token')
+ await store.getState().initialize('other','login-only')
+ assert.equal(store.getState().ready,false);assert.equal(store.getState().accessToken,'')
+})
+test('only a per-account history hint persists, never token or authorization readiness',async()=>{
+ const linked=new Set(),history={wasLinked:userId=>linked.has(userId),rememberLinked:userId=>linked.add(userId)}
+ const first=createDriveConnectionStore(async()=>{},history)
+ await first.getState().initialize('user','drive-token')
+ const reopened=createDriveConnectionStore(async()=>{},history)
+ await reopened.getState().initialize('user','')
+ assert.equal(reopened.getState().linked,true);assert.equal(reopened.getState().ready,false);assert.equal(reopened.getState().accessToken,'')
+ await reopened.getState().initialize('other','')
+ assert.equal(reopened.getState().linked,false)
+})
+test('missing provider token during validation does not cancel the pending Drive check',async()=>{
+ const wait=deferred();let calls=0
+ const store=createDriveConnectionStore(async()=>{calls++;await wait.promise})
+ const pending=store.getState().initialize('user','drive-token')
+ const refreshed=store.getState().initialize('user','')
+ assert.equal(pending,refreshed)
+ wait.resolve();await pending
+ assert.equal(calls,1);assert.equal(store.getState().ready,true);assert.equal(store.getState().checking,false)
+})

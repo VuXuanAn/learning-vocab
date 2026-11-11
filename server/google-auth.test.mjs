@@ -10,6 +10,7 @@ test('Google OAuth redirects to app settings on the current origin', () => {
     assert.equal(config.provider, 'google')
     assert.equal(config.options.redirectTo, origin + '/folders')
     assert.equal(config.options.queryParams.prompt, 'select_account')
+    assert.equal(config.options.queryParams.include_granted_scopes, 'true')
   }
 })
 test('Google OAuth rejects non-web origins', () => {

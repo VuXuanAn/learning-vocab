@@ -46,7 +46,7 @@ export default function BackupPanel() {
    if(!userId)throw new Error('Hãy đăng nhập trước khi nhập dữ liệu.')
    const run=()=>importBackup(preview,{progress,preferences})
    const result=navigator.locks?await navigator.locks.request('vocab-rows-'+userId,run):await run()
-   setPreview(null);setFilename('');toast.success('Đã nhập '+result.notes+' từ vựng vào thư mục mới. Dữ liệu sẽ tự đồng bộ lên Supabase.')
+   setPreview(null);setFilename('');toast.success('Đã nhập '+result.notes+' từ vựng vào thư mục mới. Bấm Đồng bộ để gửi dữ liệu lên Supabase.')
   }catch(error){setError(error instanceof Error?error.message:'Không nhập được dữ liệu. Dữ liệu cũ được giữ nguyên.')}
   finally{setBusy(false)}
  }

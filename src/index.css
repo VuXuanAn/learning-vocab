@@ -91,3 +91,64 @@ button, a, input, select, textarea { outline-offset: 4px; }
 .vocab-folders-page [data-slot="table-container"], .card-manager-page [data-slot="table-container"] { overflow: visible; }
 .review-layout > section:not(.review-session) { flex: 1 1 0%; }
 .reading-content .reading-source-highlight { background: #fef08a; outline: 2px solid #facc15; outline-offset: 2px; }
+
+/* Compact screens use the full width; the desktop sidebar starts at 1024px. */
+.manager-summary > button { min-width: 0; }
+@media (max-width: 1023px) {
+ .app-workspace { padding-top: calc(3.5rem + env(safe-area-inset-top)); }
+ .app-mobile-header { height: calc(3.5rem + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); }
+ [data-app-sidebar] { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+ [data-app-sidebar] nav a { font-size: .875rem; }
+ .reading-columns, .speaking-detail-panels { display: flex; flex-direction: column; min-height: 0; }
+ .reading-columns > *, .speaking-detail-panels > * { flex: 1 1 0%; min-height: 0; }
+ .reading-columns[data-mobile-pane="content"] > aside, .reading-columns[data-mobile-pane="notes"] > section,
+ .speaking-detail-panels[data-mobile-pane="content"] > .speaking-recordings-panel,
+ .speaking-detail-panels[data-mobile-pane="recordings"] > .speaking-reference-panel { display: none; }
+ .manager-summary > button { min-width: 110px; flex: 0 0 auto; }
+ .workspace-page { padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+}
+@media (max-width: 639px) {
+ .workspace-page { gap: .75rem; padding-top: .875rem; padding-right: .75rem; padding-left: .75rem; }
+ .workspace-page h1 { font-size: 1.5rem; line-height: 1.25; margin-top: 0; }
+ .workspace-page h2 { overflow-wrap: anywhere; }
+ .workspace-page .eyebrow { display: none; }
+ .workspace-page .panel.p-6, .workspace-page .panel.p-5 { padding: 1rem; }
+ .workspace-page .panel > .p-6, .workspace-page .panel > .p-5 { padding: 1rem; }
+ .reading-content-panel > div:first-child, .reading-columns > aside > div:first-child { padding: .75rem 1rem; }
+ .reading-content-panel > p { padding: .5rem .75rem; line-height: 1.45; }
+ .reading-page > nav, .speaking-detail-body > nav { font-size: .7rem; gap: .35rem; }
+ .reading-page > div:first-child > div > p:not(.eyebrow), .speaking-page > div:first-child > div > p:not(.eyebrow) { display: none; }
+ .reading-page .reading-content { font-size: .9375rem; line-height: 1.85; }
+ .manager-summary > button { min-width: 96px; padding: .625rem .75rem; }
+ .card-manager-page > section[aria-label="Thống kê từ vựng"] > p { display: none; }
+ .card-manager-page > nav { display: none; }
+ .manager-filters { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: .5rem; padding: .75rem; }
+ .manager-filters > div:first-child { grid-column: 1 / -1; min-width: 0; }
+ .manager-filters > div:not(:first-child) { grid-column: 1 / -1; }
+ .manager-filters > [role="combobox"] { width: 100%; min-width: 0; }
+ .vocab-folders-page table { min-width: 320px; }
+ .vocab-folders-page th, .vocab-folders-page td { padding-left: .375rem; padding-right: .375rem; font-size: .75rem; }
+ .vocab-folders-page > p { display: none; }
+ .review-page .secondary.w-40 { width: auto; min-width: 0; padding-left: .75rem; padding-right: .75rem; font-size: .75rem; }
+ .review-session { gap: .625rem; margin-top: .75rem; }
+ .review-session > p:last-child { display: none; }
+ .review-session article > div:first-child { padding: .625rem .75rem; }
+ .review-session article > div:last-child { padding: .75rem; }
+ .review-page [data-focus-mode="true"] { padding-top: .75rem; }
+ [data-slot="dialog-content"] { max-width: calc(100vw - 1rem); max-height: calc(100dvh - 1rem); }
+ .vocabulary-dialog { width: 100%; max-width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; padding: 0; }
+ .vocabulary-dialog [data-slot="dialog-header"] { padding: 1rem 3rem 1rem 1rem; }
+ .vocabulary-dialog [data-slot="dialog-header"] h2 { font-size: 1.25rem; }
+ .vocabulary-dialog [data-slot="dialog-header"] p { font-size: .75rem; }
+ .vocabulary-dialog > div:last-child { padding: .75rem 1rem max(.75rem, env(safe-area-inset-bottom)); }
+ input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea { font-size: 16px; }
+ .workspace-sync-alert { max-height: 4rem; overflow-y: auto; padding: .375rem .75rem; font-size: .75rem; }
+}
+[data-slot="select-content"] { max-width: calc(100vw - 1rem); }
+@media (min-width: 1024px) {
+ .reading-columns[data-notes-hidden="true"] { grid-template-columns: minmax(0, 1fr) 3.5rem; }
+ .reading-columns[data-notes-hidden="true"] > aside > div:first-child { justify-content: center; padding: .75rem .375rem; }
+ .reading-columns[data-notes-hidden="true"] .study-notes-title,
+ .reading-columns[data-notes-hidden="true"] .study-notes-add,
+ .reading-columns[data-notes-hidden="true"] .study-notes-content { display: none; }
+}

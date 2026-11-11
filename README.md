@@ -232,7 +232,7 @@ Kiểm tra tự động bao gồm round-trip 5 loại thẻ và 7 thẻ sinh ra,
 
 ### Tự động đồng bộ hai chiều
 
-Cơ chế hiện tại thay thế mô tả chỉ đồng bộ thủ công ở các phần trước: khi mở kho đã đăng nhập, ứng dụng tự merge hai chiều; sau thay đổi dữ liệu local chờ khoảng 800 ms để gom lượt gửi; kiểm tra cloud mỗi 30 giây khi tab hiển thị; đồng bộ khi có mạng, quay lại tab và visibilitychange/pagehide. Nút Đồng bộ vẫn cho gửi ngay hoặc chọn hướng upload/download thủ công.
+Thư viện từ vựng và lịch ôn hiện đồng bộ thủ công: mọi thay đổi được lưu trong IndexedDB theo tài khoản; dấu ! đỏ báo dữ liệu đang chờ gửi. Chỉ bấm Đồng bộ mới bắt đầu gửi/nhận Supabase. Không tự chạy khi mở app, thay đổi dữ liệu, focus/online/pagehide hoặc khi lỗi; lỗi cần bấm thử lại. Thiết bị mới cần bấm Đồng bộ để tải thư viện. Các cài đặt cá nhân và thư viện Speaking/Reading dùng cơ chế lưu riêng.
 
 Khi ẩn/đóng tab, controller bắt đầu lượt merge ngay nếu không có lượt đang chạy; nếu đang chạy thì xếp một lượt tiếp theo. Trình duyệt không bảo đảm hoàn tất mạng trong sự kiện đóng trang, nên không cam kết dữ liệu đã lên server ngay lúc đóng. Các thay đổi đã lưu IndexedDB và sync base còn giữ nguyên; lần mở sau sẽ tính phần chưa gửi và tiếp tục merge. Đóng browser/OS đột ngột trước khi thao tác lưu local hoàn tất cũng không thể bảo đảm bằng sự kiện đóng trang. Chỉ trạng thái Đã đồng bộ và không còn pending mới thể hiện lượt gửi/nhận đã hoàn tất.
 
@@ -275,3 +275,9 @@ Endpoint `POST /api/ai/review-speaking` nhận audio base64 tối đa 10 MB và 
 Kết quả lưu cùng bản ghi trên IndexedDB. Chạy `009_speaking_ai_review.sql` để thêm cột JSON ai_review lên speaking_recordings. Nếu bản ghi đã được lưu cloud, review được cập nhật ngay; nếu chưa thì gửi kèm lần Lưu lên Drive/Lưu lịch sử sau. Khi lỗi cloud, review local vẫn giữ, có thông báo thử lại. Human review trong shadowing_reviews vẫn tách riêng. Chưa kiểm thử với bản ghi giọng thật trên Google, các test dùng transport/audio giả lập và kiểm tra payload/schema/RLS bằng PostgreSQL nhúng.
 
 AI review schema compatibility: chỉ gửi cấu trúc JSON gọn (object/properties/required/array/enum/nullable type array) tới Gemini; các giới hạn chuỗi/mảng/điểm vẫn được Zod kiểm tra ở backend sau generation. Kiểm tra live bằng WAV im lặng tái hiện full schema 400 INVALID_ARGUMENT; schema gọn nhận 503 UNAVAILABLE do model quá tải, nên chưa xác minh được review giọng thật thành công. Không tự chuyển model hoặc gửi lại request chấm khi gặp 503; UI hiển thị lỗi quá tải để người dùng chủ động thử lại.
+
+## Cache từ vựng khi đọc
+
+Bôi đen một từ hoặc cụm từ trong nội dung để mở menu gồm Thêm từ vựng, Phát âm (giọng đọc trình duyệt, không gọi AI) và Thêm vào cache. Cache là bảng IndexedDB `vocabularyCache` trong database riêng của tài khoản (version 7), giữ lại sau khi tải lại trang. Cache không tự tạo thẻ, không gửi lên Supabase và không thuộc bản export thư viện từ vựng.
+
+Trong AI generator, Điền từ cache ghép các mục vào danh sách đang nhập, bỏ trùng và giới hạn 20 mục. Phần dư vẫn giữ trong cache cho lượt sau. Nút Danh sách cache cho xem và xóa từng mục. Điền hoặc AI gen chưa làm mất cache; chỉ các từ đầu vào đã được lưu thành thẻ thành công mới bị xóa khỏi cache.

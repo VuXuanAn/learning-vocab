@@ -145,7 +145,7 @@ function ReviewContent({ folderId }: { folderId: string }) {
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
   })
-  const fullscreenButton = <button type="button" className="secondary h-10 w-40 shrink-0 whitespace-nowrap" aria-pressed={focusMode} onClick={() => void toggleFullscreen()}>{focusMode ? <Minimize size={17} /> : <Maximize size={17} />}{focusMode ? 'Thu nhỏ (Esc)' : 'Toàn màn hình'}</button>
+  const fullscreenButton = <button type="button" className="secondary h-10 w-40 shrink-0 whitespace-nowrap" aria-pressed={focusMode} onClick={() => void toggleFullscreen()}>{focusMode ? <Minimize size={17} /> : <Maximize size={17} />}{focusMode ? 'Thu nhỏ' : 'Toàn màn hình'}</button>
   return <main ref={studyRoot} tabIndex={-1} data-focus-mode={focusMode ? 'true' : undefined} className={focusMode ? 'workspace-page review-page fixed inset-0 z-40 bg-[#f6f8f7] px-4 py-5 sm:px-10' : 'workspace-page review-page px-4 py-5 sm:px-6'}>
     <div className="review-layout flex min-h-0 w-full flex-1 flex-col">
     {focusMode && !session && <div className="fixed right-4 top-4 z-50 sm:right-8">{fullscreenButton}</div>}
@@ -163,9 +163,8 @@ function ReviewContent({ folderId }: { folderId: string }) {
           {revealed&&item.note.kind!=='ai'&&<div className="px-6 pb-5"><ReadingSources note={item.note}/></div>}
           {answerTarget && <TypedAnswer key={reviewTurn + ':' + typedRevision + ':' + answerTarget.kind + ':' + answerTarget.expected} target={answerTarget} revealed={revealed} disabled={saving || !!editing} onReveal={() => {setUnlockedTurn(reviewTurn);setRevealed(true)}}/>}
         </div>
-        <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-5">{!hasSeenAnswer ? <button type="button" aria-keyshortcuts="Space" className="primary w-full" onClick={flipCard}>Hiện đáp án <kbd className="ml-2 rounded border border-white/40 px-1.5 text-xs">Space</kbd></button> : <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{reviewGrades.map(({ grade, label, color }) => <button key={grade} type="button" aria-keyshortcuts={String(grade)} disabled={saving} className={`rounded-xl border px-3 py-3 text-sm font-semibold ${color}`} onClick={() => void answer(grade)}><kbd className="mr-2 rounded border border-current/20 px-1.5 text-xs">{grade}</kbd>{label}<span className="mt-1 block text-xs font-normal">{formatInterval(nextReview(record, grade, new Date(now)).card.due, now)}</span></button>)}</div>}</div>
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50 p-5">{!hasSeenAnswer ? <button type="button" aria-keyshortcuts="Space" className="primary w-full" onClick={flipCard}>Hiện đáp án</button> : <div className="grid grid-cols-4 gap-2 sm:gap-3">{reviewGrades.map(({ grade, label, color }) => <button key={grade} type="button" aria-keyshortcuts={String(grade)} disabled={saving} className={`min-h-11 rounded-lg border px-1.5 py-2 text-xs font-semibold sm:rounded-xl sm:px-3 sm:py-2.5 sm:text-sm ${color}`} onClick={() => void answer(grade)}>{label}<span className="mt-0.5 block text-[10px] font-normal sm:mt-1 sm:text-xs">{formatInterval(nextReview(record, grade, new Date(now)).card.due, now)}</span></button>)}</div>}</div>
       </article>}
-      <p className="text-center text-xs leading-6 text-slate-500">Phím tắt: 1 Quên · 2 Khó · 3 Tốt · 4 Dễ (sau lần lật đầu tiên). Space để lật qua lại hai mặt. S để nghe phát âm. Esc thoát toàn màn hình.</p>
     </section>}
 
     </div>
