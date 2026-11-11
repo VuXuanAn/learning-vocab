@@ -14,7 +14,7 @@ import { generateCards, noteLabels, type Note, type NoteKind } from '../lib/card
 
 export default function AddVocabularyForm({ initialFolderId = '' }: { initialFolderId?: string }) {
   const [folderId, setFolderId] = useState(initialFolderId)
-  const folders = useLiveQuery(() => db.folders.toArray())
+  const folders = useLiveQuery(() => db.folders.filter(folder => folder.permission !== 'viewer').toArray())
   const [showEditor, setShowEditor] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<CardTemplate | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})

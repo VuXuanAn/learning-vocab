@@ -1,9 +1,11 @@
+import VocabularySyncButton from './lib/VocabularySyncButton'
+import VocabularySyncProvider from './lib/VocabularySyncProvider'
 import PreferencesSyncProvider from './lib/PreferencesSyncProvider'
 import CardManagerPage from './pages/CardManagerPage'
 import { useLayoutEffect, useRef, useState } from 'react'
 import AccountWorkspace from './lib/AccountWorkspace'
 import { BrowserRouter, NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom'
-import { BookOpen, Plus, Brain, Settings } from 'lucide-react'
+import { BookOpen, Plus, Brain } from 'lucide-react'
 import { Toaster } from 'sonner'
 import AuthProvider, { useAuth } from './lib/AuthProvider'
 import GoogleAccountButton from './lib/GoogleAccountButton'
@@ -31,11 +33,34 @@ function PublicLayout() {
     observer.observe(header)
     return () => observer.disconnect()
   }, [])
-  return <><header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-md"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4"><NavLink to="/" className="flex items-center gap-3 font-bold text-slate-900"><span className="rounded-xl bg-emerald-700 p-2 text-white"><BookOpen size={21}/></span>Vocab Library</NavLink><nav aria-label="Điều hướng chính" className="flex flex-wrap items-center gap-2">{session && <>{[{to:'/folders',label:'Bộ thẻ',icon:BookOpen},{to:'/review',label:'Ôn tập',icon:Brain},{to:'/settings',label:'Cài đặt',icon:Settings}].map(({to,label,icon:Icon})=><NavLink key={to} to={to} className={({isActive})=>`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${isActive?'bg-emerald-700 text-white':'text-slate-500 hover:bg-emerald-50'}`}><Icon size={18}/>{label}</NavLink>)}<NavLink to="/folders?add=1" className="flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-slate-500 hover:bg-emerald-50"><Plus size={18}/>Thêm từ vựng</NavLink></>}<GoogleAccountButton/></nav></div></header><div aria-hidden="true" style={{height: headerHeight}}/><Outlet/></>
+  return <>
+    <header ref={headerRef} className="fixed inset-x-0 top-0 z-30 border-b border-slate-200/70 bg-white/95 backdrop-blur-md">
+      <div className="mx-auto grid max-w-7xl grid-cols-[1fr_auto] items-center gap-x-5 gap-y-3 px-4 py-3 sm:px-6 md:grid-cols-[1fr_auto_1fr] md:py-3.5">
+        <NavLink to={session ? '/folders' : '/'} className="flex w-fit items-center gap-2.5 text-sm font-bold tracking-tight text-slate-900 sm:text-base">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-700 text-white"><BookOpen size={19}/></span>
+          <span className="hidden sm:inline">Vocab Library</span><span className="sm:hidden">Vocab</span>
+        </NavLink>
+        {session && <nav aria-label="Điều hướng chính" className="order-3 col-span-2 flex items-center justify-center gap-1 rounded-xl bg-slate-100/80 p-1 md:order-2 md:col-span-1">
+          {[{to:'/folders',label:'Bộ thẻ',icon:BookOpen},{to:'/review',label:'Ôn tập',icon:Brain}].map(({to,label,icon:Icon}) => <NavLink key={to} to={to} className={({isActive}) => `flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors md:flex-none ${isActive ? 'bg-white text-emerald-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><Icon size={16}/>{label}</NavLink>)}
+        </nav>}
+        <div className={`order-2 flex items-center justify-end gap-2 ${session ? 'md:order-3' : 'md:col-span-2'}`}>
+          {session && <>
+            <VocabularySyncButton/>
+            <NavLink to="/folders?add=1" aria-label="Thêm từ vựng" title="Thêm từ vựng" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-700 text-white transition-colors hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"><Plus size={19}/></NavLink>
+            <span aria-hidden="true" className="mx-1 h-5 w-px bg-slate-200"/>
+          </>}
+          <GoogleAccountButton/>
+        </div>
+      </div>
+    </header>
+    <div aria-hidden="true" style={{height: headerHeight}}/>
+    <Outlet/>
+  </>
+
 }
 function ProtectedLayout() {
   const { session, loading } = useAuth()
   if (loading) return <main className="p-12 text-center text-slate-500" role="status">Đang kiểm tra đăng nhập…</main>
   if (!session) return <Navigate to="/" replace/>
-  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><AddVocabularyProvider><MeaningReminderProvider><Outlet/></MeaningReminderProvider></AddVocabularyProvider></PreferencesSyncProvider></AccountWorkspace>
+  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><VocabularySyncProvider><AddVocabularyProvider><MeaningReminderProvider><Outlet/></MeaningReminderProvider></AddVocabularyProvider></VocabularySyncProvider></PreferencesSyncProvider></AccountWorkspace>
 }

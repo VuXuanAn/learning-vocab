@@ -1,4 +1,4 @@
-﻿-- Run once in Supabase Dashboard > SQL Editor, after 001_vocab_snapshots.sql.
+-- Run in Supabase Dashboard > SQL Editor. Requires Supabase Auth only.
 create table if not exists public.user_preferences (
   user_id uuid primary key references auth.users(id) on delete cascade,
   preferences jsonb not null default '{"reminderEnabled":true,"reminderMinutes":5,"autoVoice":false}'::jsonb,

@@ -1,4 +1,4 @@
-﻿import { db } from './db'
+import { db } from './db'
 import type { Note } from './cards'
 import { aiTemplate, rowToNote, type SpellingCheck } from './ai-batch'
 import { findRelatedNote, relatedLinkKey } from './related-words'
@@ -7,6 +7,7 @@ export async function saveRelatedNote(parentId: string, word: string, generated:
   return db.transaction('rw', db.notes, db.folders, async () => {
     const parent = await db.notes.get(parentId)
     if (!parent || parent.folderId !== generated.folderId || !parent.folderId || !await db.folders.get(parent.folderId)) throw new Error('Từ gốc hoặc thư mục đã thay đổi. Hãy mở lại thẻ.')
+    if (parent.readOnly) throw new Error('Bạn chỉ có quyền xem bộ thẻ này.')
     const notes = await db.notes.toArray()
     // Recheck after generation: another tab may have created the same word.
     const target = findRelatedNote(notes, parent, word) ?? findRelatedNote(notes, parent, generated.front) ?? generated

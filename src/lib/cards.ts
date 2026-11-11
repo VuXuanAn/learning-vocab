@@ -9,6 +9,7 @@ export interface Note {
   tags: string
   template?: CardTemplate
   values?: Record<string, string>
+  readOnly?: boolean
   folderId?: string
   createdAt: number
 }

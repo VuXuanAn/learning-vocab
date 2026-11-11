@@ -1,7 +1,8 @@
-﻿import { db } from './db'
+import { db } from './db'
 import { generateCards, type Note } from './cards'
 import { aiTemplate, hasWordFamily } from './ai-batch'
 export async function saveNoteEdits(original: Note, draft: Note) {
+  if (original.readOnly) throw new Error('Bạn chỉ có quyền xem bộ thẻ này.')
   const next: Note = { ...original, front: draft.front.trim(), back: draft.back.trim(), extra: draft.extra.trim(), tags: draft.tags.trim(), values: draft.values ? Object.fromEntries(Object.entries(draft.values).map(([key, value]) => [key, value.trim()])) : undefined }
   if (next.kind === 'ai') {
     next.template = aiTemplate

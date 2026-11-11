@@ -1,4 +1,4 @@
-﻿import 'fake-indexeddb/auto'
+import 'fake-indexeddb/auto'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -6,7 +6,7 @@ import { stripTypeScriptTypes } from 'node:module'
 const read = p => readFileSync(new URL(p, import.meta.url), 'utf8')
 const url = s => 'data:text/javascript;base64,' + Buffer.from(stripTypeScriptTypes(s)).toString('base64')
 const dbUrl = url(read('../src/lib/db.ts').replace("'dexie'", JSON.stringify(import.meta.resolve('dexie'))))
-const { VocabDatabase, activateAccountDatabase, accountDatabaseName, migrateOwnedLegacy } = await import(dbUrl)
+const { VocabDatabase, activateAccountDatabase, accountDatabaseName } = await import(dbUrl)
 const memory = new Map()
 globalThis.localStorage = { getItem: k => memory.get(k) ?? null, setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) }
 globalThis.window = { localStorage }
@@ -15,14 +15,14 @@ const settingsUrl = url(read('../src/lib/settings.ts').replace("'zustand'", JSON
 const { useSettings, activateAccountSettings } = await import(settingsUrl)
 const folder = { id:'same-id', name:'Private', nameKey:'private', createdAt:1 }
 
-test('accounts isolate folders, notes, schedules, backups and preserve them on reopen', async () => {
+test('accounts isolate folders, notes, schedules, sync metadata and preserve them on reopen', async () => {
  const a = new VocabDatabase(accountDatabaseName('test-a'))
  const b = new VocabDatabase(accountDatabaseName('test-b'))
  try {
   await a.folders.add(folder)
   await a.notes.add({id:'word',folderId:folder.id,front:'secret-a'})
   await a.reviews.add({id:'review',noteId:'word',due:new Date('2026-11-20')})
-  await a.localBackups.add({id:'backup',createdAt:'2026-11-10'})
+  await a.syncRows.add({key:'notes:word',table:'notes',id:'word',remote:{},value:{front:'secret-a'}})
   for (const table of b.tables) assert.equal(await table.count(),0)
   await b.folders.add({...folder,name:'B folder'})
   await b.notes.add({id:'word',folderId:folder.id,front:'secret-b'})
@@ -34,25 +34,15 @@ test('accounts isolate folders, notes, schedules, backups and preserve them on r
  } finally { await a.delete(); await b.delete() }
 })
 
-test('legacy migration requires the recorded owner and never overwrites account data', async () => {
- const legacy = new VocabDatabase('vocab-library')
- const a = new VocabDatabase(accountDatabaseName('legacy-a'))
- const b = new VocabDatabase(accountDatabaseName('legacy-b'))
+test('new cache namespace excludes old account data without importing it', async () => {
+ const old = new VocabDatabase('vocab-library-account-old-user')
+ const fresh = new VocabDatabase(accountDatabaseName('old-user'))
  try {
-  await legacy.folders.add(folder)
-  assert.equal(await migrateOwnedLegacy(a,'legacy-a'),false)
-  assert.equal(await a.folders.count(),0)
-  await legacy.cloudMeta.put({id:'current',userId:'legacy-a',revision:3,lastSyncAt:'2026-11-10'})
-  await legacy.localBackups.bulkAdd([{id:'own',owner:{userId:'legacy-a'},createdAt:'2026-11-10'},{id:'other',owner:{userId:'legacy-b'},createdAt:'2026-11-10'}])
-  assert.equal(await migrateOwnedLegacy(b,'legacy-b'),false)
-  assert.equal(await migrateOwnedLegacy(a,'legacy-a'),true)
-  assert.equal((await a.cloudMeta.get('current')).revision,3)
-  assert.deepEqual((await a.localBackups.toArray()).map(x=>x.id),['own'])
-  await a.folders.update(folder.id,{name:'Edited'})
-  assert.equal(await migrateOwnedLegacy(a,'legacy-a'),false)
-  assert.equal((await a.folders.get(folder.id)).name,'Edited')
-  assert.equal(await legacy.folders.count(),1)
- } finally { await legacy.delete(); await a.delete(); await b.delete() }
+  await old.folders.add(folder)
+  assert.notEqual(old.name, fresh.name)
+  assert.equal(await fresh.folders.count(), 0)
+  assert.equal(await old.folders.count(), 1)
+ } finally { await old.delete(); await fresh.delete() }
 })
 
 test('preferences are scoped and an unknown account gets defaults', () => {

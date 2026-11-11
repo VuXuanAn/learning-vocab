@@ -1,4 +1,4 @@
-﻿import { db } from './db'
+import { db } from './db'
 import type { Note } from './cards'
 import { filterNotesByFolder, type VocabularyFolder } from './folders'
 export function noteMeaning(note: Note) {
@@ -12,12 +12,15 @@ export function managedNotes(notes: Note[], folders: VocabularyFolder[], folderI
 }
 export async function deleteNote(noteId: string) {
   await db.transaction('rw', db.notes, db.reviews, db.reviewLogs, async () => {
-    if (!await db.notes.get(noteId)) throw new Error('Thẻ đã bị xóa ở nơi khác.')
+    const current = await db.notes.get(noteId)
+    if (current?.readOnly) throw new Error('Bạn chỉ có quyền xem bộ thẻ này.')
+    if (!current) throw new Error('Thẻ đã bị xóa ở nơi khác.')
     await db.reviews.where('noteId').equals(noteId).delete()
     await db.reviewLogs.where('noteId').equals(noteId).delete()
     await db.notes.delete(noteId)
     // A deleted related card should become an AI gen action again.
     for (const note of await db.notes.toArray()) {
+      if (note.readOnly) continue
       const entries = Object.entries(note.values ?? {})
       const retained = entries.filter(([key,value]) => !(key.startsWith('__relatedNote:') && value === noteId))
       if (retained.length !== entries.length) await db.notes.update(note.id, {values:Object.fromEntries(retained)})

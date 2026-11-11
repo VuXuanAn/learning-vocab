@@ -1,5 +1,5 @@
 import type { Note } from './cards'
-export interface VocabularyFolder { id: string; name: string; nameKey: string; createdAt: number; parentId?: string; reverseCards?: boolean }
+export interface VocabularyFolder { id: string; name: string; nameKey: string; createdAt: number; parentId?: string; reverseCards?: boolean; ownerId?: string; permission?: 'owner' | 'editor' | 'viewer' }
 export function folderIds(folderId: string, folders: VocabularyFolder[] = []) {
   const ids = new Set([folderId])
   let changed = true

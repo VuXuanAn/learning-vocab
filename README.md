@@ -1,4 +1,4 @@
-﻿# Vocab Library
+# Vocab Library
 
 React + TypeScript + Vite + Tailwind CSS cho ứng dụng từ vựng kiểu Anki.
 Hiện có trang chào và cấu hình nền tảng, chưa có chức năng tạo thẻ hoặc ôn tập.
@@ -179,20 +179,27 @@ Thẻ AI hỏi nghĩa trước và từ vựng sau, không lộ từ qua ví d�
 
 ## Supabase (đã tích hợp)
 
-Cài đặt → Tài khoản & lưu trữ Supabase: đăng ký/đăng nhập, sao lưu cloud, tải về, xuất JSON và khôi phục local. Đây là đồng bộ thủ công theo snapshot; không tự merge hoặc auto-sync nền. Từ vựng vẫn làm việc offline.
+Thẻ, thư mục, mẫu thẻ và lịch ôn lưu vào IndexedDB. Bấm Đồng bộ ở header để gửi thay đổi lên Supabase và nhận dữ liệu cloud. Mất mạng giữ thay đổi trên máy; có mạng trở lại bấm Đồng bộ để gửi. Trạng thái đồng bộ hiển thị ở header; không còn phần sao lưu thủ công trong Cài đặt. Nội dung được đồng bộ từng dòng vào folders/notes/card_templates; tiến độ riêng trong user_card_progress và review_logs. Xem supabase/README.md.
 
-Điền VITE_SUPABASE_URL và VITE_SUPABASE_PUBLISHABLE_KEY trong .env ở thư mục gốc (mẫu .env.example), chạy supabase/migrations/001_vocab_snapshots.sql trong SQL Editor của project, cấu hình Auth redirect rồi khởi động lại frontend. Không dùng service_role/secret key trong frontend. Hướng dẫn đầy đủ: supabase/README.md.
+Điền VITE_SUPABASE_URL và VITE_SUPABASE_PUBLISHABLE_KEY trong .env ở thư mục gốc (mẫu .env.example), chạy migrations 002, 003 (nếu chưa chạy), 005 và dọn snapshot cũ bằng 004 theo supabase/SHARED_VOCABULARY_MIGRATION.md, cấu hình Auth redirect rồi khởi động lại frontend. Không dùng service_role/secret key trong frontend. Hướng dẫn đầy đủ: supabase/README.md.
 
-IndexedDB v6 thêm cloudMeta và localBackups; giữ toàn bộ dữ liệu học hiện có. Tải cloud về giữ bản backup local trước khi thay, phục hồi Date của FSRS và cài đặt. RPC + revision ngăn thiết bị cũ ghi đè bản cloud mới hơn. RLS giới hạn mỗi tài khoản với snapshot của chính mình. Chưa có kiểm tra live khi project chưa cấu hình.
+Cache mới tách theo tài khoản và không nhập nội dung snapshot cũ. Nội dung folder chia sẻ được bảo vệ bằng RLS theo thành viên; tiến độ và lịch sử riêng từng người. Lịch ôn/lịch sử được lưu atomic bằng save_card_review. Chưa xác minh kết nối trên project thật bằng tài khoản đăng nhập.
 
 ### Tạo thẻ từ các dạng từ liên quan
 
 Trong mặt sau thẻ AI, mỗi dòng dạng `effective (adj): hiệu quả` có nút **AI gen** nếu từ chưa tồn tại trong kho của tài khoản hiện tại. Bấm nút sẽ gọi AI một lần cho từ đó và tự lưu thẻ đầy đủ vào cùng thư mục với thẻ nguồn. Nếu từ đã tồn tại (kể cả trong thư mục khác), hiển thị link để mở popup xem thẻ. Đóng popup tiếp tục phiên ôn đang học; link có tham số `note` để mở lại trực tiếp.
 
-Khi AI sửa từ hoặc chuyển về dạng gốc, liên kết từ dòng ban đầu tới ID thẻ được lưu cùng dữ liệu note và có trong snapshot cloud. Trước khi lưu, kiểm tra trùng trong transaction để tránh tạo hai thẻ khi thao tác ở nhiều tab. Các thay đổi vẫn cần bấm Sao lưu lên cloud trong Cài đặt theo cơ chế hiện tại.
+Khi AI sửa từ hoặc chuyển về dạng gốc, liên kết từ dòng ban đầu tới ID thẻ được lưu cùng dữ liệu note và được đồng bộ cùng bản ghi note. Trước khi lưu, kiểm tra trùng trong transaction để tránh tạo hai thẻ khi thao tác ở nhiều tab. Bấm Đồng bộ ở header để đưa các thay đổi lên Supabase.
 
 ### Quản lý thẻ
 
 Bộ thẻ → menu action của folder → **Quản lý thẻ** mở `/cards?folder=<id>`. Menu action ở tiêu đề bảng mở danh sách toàn bộ. Trang này yêu cầu đăng nhập, dùng kho riêng của tài khoản hiện tại; có tìm từ/nghĩa/nhãn, lọc folder, gồm hoặc không gồm thư mục con và phân trang 20 từ vựng.
 
-Thêm từ, xem và chỉnh sửa dùng popup. Một từ vựng có thể sinh nhiều thẻ (đảo chiều/cloze); popup xem cho chọn từng thẻ. Chỉnh sửa giữ lịch ôn. Xóa có xác nhận và xóa toàn bộ thẻ/lịch ôn/lịch sử của từ đó trong một transaction; các liên kết từ liên quan trỏ tới từ bị xóa được bỏ để có thể tạo lại. Các thay đổi cần Sao lưu lên cloud trong Cài đặt như trước.
+Thêm từ, xem và chỉnh sửa dùng popup. Một từ vựng có thể sinh nhiều thẻ (đảo chiều/cloze); popup xem cho chọn từng thẻ. Chỉnh sửa giữ lịch ôn. Xóa có xác nhận và xóa toàn bộ thẻ/lịch ôn/lịch sử của từ đó trong một transaction; các liên kết từ liên quan trỏ tới từ bị xóa được bỏ để có thể tạo lại. Bấm Đồng bộ ở header để đưa các thay đổi lên Supabase.
+
+
+## Đồng bộ theo bảng riêng
+
+Frontend không còn đọc/ghi snapshot. Cache mới `vocab-rows-v1-account-<user_id>` không nhập dữ liệu cũ. Các thay đổi chỉ đồng bộ từng dòng khi bấm Đồng bộ ở header, giữ pending offline và dùng RPC atomic cho lịch ôn. Cần chạy migration 005 sau 003; xem supabase/README.md.
+
+Lần đầu bấm Đồng bộ ở header có lựa chọn Tải lên Supabase / Tải từ Supabase về máy / Đồng bộ hai chiều. Tải lên gửi dữ liệu local theo từng dòng và giữ dữ liệu khác trên server. Tải về thay local, giữ bản khôi phục trong IndexedDB; menu header cho khôi phục khi cần. Những lần sau nút chính đồng bộ hai chiều.

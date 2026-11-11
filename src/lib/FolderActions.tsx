@@ -15,6 +15,8 @@ export default function FolderActions({ folder, onCreated }: { folder?: Vocabula
   const navigate = useNavigate()
   const [dialog, setDialog] = useState<'create' | 'rename' | null>(null)
   const [busy, setBusy] = useState(false)
+  const owner = !folder?.permission || folder.permission === 'owner'
+  const writable = folder?.permission !== 'viewer'
   async function reverse(checked: boolean) {
     if (!folder || busy) return
     setBusy(true)
@@ -32,7 +34,7 @@ export default function FolderActions({ folder, onCreated }: { folder?: Vocabula
     finally { setBusy(false) }
   }
   return <>
-    <DropdownMenu><DropdownMenuTrigger disabled={busy} aria-label={folder ? `Thao tác với ${folder.name}` : 'Thao tác bộ thẻ'} render={<Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-lg" />}><Settings2 size={16} /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-52"><DropdownMenuItem onClick={() => navigate('/cards?folder=' + encodeURIComponent(folder?.id ?? 'all'))}><List size={16}/>Quản lý thẻ</DropdownMenuItem><DropdownMenuSeparator/><DropdownMenuItem onClick={() => setDialog('create')}><FolderPlus size={16} />{folder ? 'Tạo thư mục con' : 'Tạo thư mục gốc'}</DropdownMenuItem>{folder && <><DropdownMenuItem onClick={() => addVocabulary(folder.id)}><FolderPlus size={16} />Thêm từ vựng</DropdownMenuItem><DropdownMenuItem onClick={() => setDialog('rename')}><Pencil size={16} />Đổi tên</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuCheckboxItem checked={!!folder.reverseCards} onCheckedChange={checked => void reverse(checked)}>Đảo mặt trước/sau</DropdownMenuCheckboxItem><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => void remove()}><Trash2 size={16} />Xóa thư mục</DropdownMenuItem></>}</DropdownMenuContent></DropdownMenu>
+    <DropdownMenu><DropdownMenuTrigger disabled={busy} aria-label={folder ? `Thao tác với ${folder.name}` : 'Thao tác bộ thẻ'} render={<Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-lg" />}><Settings2 size={16} /></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-52"><DropdownMenuItem onClick={() => navigate('/cards?folder=' + encodeURIComponent(folder?.id ?? 'all'))}><List size={16}/>Quản lý thẻ</DropdownMenuItem><DropdownMenuSeparator/><DropdownMenuItem disabled={!owner} onClick={() => setDialog('create')}><FolderPlus size={16} />{folder ? 'Tạo thư mục con' : 'Tạo thư mục gốc'}</DropdownMenuItem>{folder && <><DropdownMenuItem disabled={!writable} onClick={() => addVocabulary(folder.id)}><FolderPlus size={16} />Thêm từ vựng</DropdownMenuItem><DropdownMenuItem disabled={!owner} onClick={() => setDialog('rename')}><Pencil size={16} />Đổi tên</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuCheckboxItem disabled={!owner} checked={!!folder.reverseCards} onCheckedChange={checked => void reverse(checked)}>Đảo mặt trước/sau</DropdownMenuCheckboxItem><DropdownMenuSeparator /><DropdownMenuItem disabled={!owner} variant="destructive" onClick={() => void remove()}><Trash2 size={16} />Xóa thư mục</DropdownMenuItem></>}</DropdownMenuContent></DropdownMenu>
     {dialog && <FolderDialog key={`${dialog}-${folder?.id ?? 'root'}`} open onOpenChange={open => { if (!open) setDialog(null) }} folder={dialog === 'rename' ? folder : undefined} defaultParentId={folder?.id} onSaved={() => { if (dialog === 'create') onCreated?.() }} />}
   </>
 }
