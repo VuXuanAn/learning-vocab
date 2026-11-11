@@ -7,7 +7,9 @@ export function audioMime(type:string){
  return ({'audio/mp3':'audio/mpeg','audio/x-m4a':'audio/mp4','audio/x-wav':'audio/wav','audio/wave':'audio/wav'} as Record<string,string>)[mime]??mime
 }
 export async function audioBase64(blob:Blob){
- if(!blob.size||blob.size>10*1024*1024)throw new Error('AI review hỗ trợ file tối đa 10 MB. Hãy ghi đoạn ngắn hơn hoặc dùng file nén MP3/WebM.')
+ const configured=Number(import.meta.env?.VITE_MAX_REVIEW_AUDIO_MB||10)
+ const maxMB=Number.isFinite(configured)&&configured>0?Math.min(configured,10):10
+ if(!blob.size||blob.size>maxMB*1024*1024)throw new Error(`AI review hỗ trợ file tối đa ${maxMB} MB. Hãy ghi đoạn ngắn hơn hoặc dùng file nén MP3/WebM.`)
  return new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(new Error('Không đọc được âm thanh.'));reader.readAsDataURL(blob)})
 }
 

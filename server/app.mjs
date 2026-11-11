@@ -8,16 +8,17 @@ import rateLimit from 'express-rate-limit'
 import { fileURLToPath } from 'node:url'
 import { generateVocabulary, generationSchema, GenerationError } from './generate.mjs'
 
-export function createApp({ client = null, model = DEFAULT_GEMINI_MODEL, frontendOrigin = 'http://localhost:5173', serveFrontend = false, usageStore = createUsageStore() } = {}) {
+export function createApp({ client = null, model = DEFAULT_GEMINI_MODEL, frontendOrigin = 'http://localhost:5173', additionalOrigins = [], trustProxy = false, serveFrontend = false, usageStore = createUsageStore() } = {}) {
   const app = express()
   const trackedClient = meteredClient(client, usageStore)
   app.disable('x-powered-by')
+  app.set('trust proxy', trustProxy)
   app.use(helmet({ contentSecurityPolicy: { directives: { connectSrc: ["'self'", 'https://*.supabase.co', 'wss://*.supabase.co', 'https://www.googleapis.com', 'https://content.googleapis.com'], mediaSrc: ["'self'", 'blob:'] } } }))
   app.use('/api', (_request, response, next) => { response.set('Cache-Control', 'no-store'); next() })
   app.get('/api/health', (_request, response) => response.json({ status: 'ok', provider: 'gemini', aiConfigured: !!client, model }))
   app.use('/api', (request, response, next) => {
     const origin = request.get('origin')
-    const allowed = new Set([frontendOrigin, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://127.0.0.1:4173', `http://${request.get('host')}`])
+    const allowed = new Set([frontendOrigin, ...additionalOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://127.0.0.1:4173', `http://${request.get('host')}`])
     if (origin && !allowed.has(origin)) return response.status(403).json({ error: 'Nguồn yêu cầu không được phép.' })
     if (request.method === 'POST' && !request.is('application/json')) return response.status(415).json({ error: 'Yêu cầu phải có dạng JSON.' })
     next()

@@ -46,14 +46,13 @@ export default function VocabularySyncProvider({ children }: { children: ReactNo
   })
   const refresh=()=>sync.request('merge')
   const visibility=()=>sync.request('merge')
-  const interval=window.setInterval(()=>{if(!document.hidden)refresh()},30000)
   window.addEventListener('online',refresh)
   window.addEventListener('focus',refresh)
   window.addEventListener('pagehide',refresh)
   document.addEventListener('visibilitychange',visibility)
   refresh()
   return()=>{
-   window.clearInterval(interval);subscription.unsubscribe();sync.stop()
+   subscription.unsubscribe();sync.stop()
    window.removeEventListener('online',refresh);window.removeEventListener('focus',refresh);window.removeEventListener('pagehide',refresh);document.removeEventListener('visibilitychange',visibility)
    useVocabularySyncState.setState({ready:false,status:{phase:'idle'},pending:false,firstSync:true,lastSyncAt:undefined,canRestore:false,sync:()=>{},restore:async()=>{}})
   }

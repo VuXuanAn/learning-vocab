@@ -37,7 +37,7 @@ export function createUsageStore({ file, now = () => new Date() } = {}) {
       if(row)for(const metric of Object.keys(monthly))monthly[metric]+=count(row[metric])
     }
     const result=row=>({...row,totalTokens:row.inputTokens+row.outputTokens})
-    return {model,timezone:'Asia/Ho_Chi_Minh',day,month,startedAt:data.startedAt,storageError,today:result({...blank(),...data.days[day]?.[model]}),monthUsage:result(monthly),quotaRemaining:null,scope:'backend'}
+    return {model,timezone:'Asia/Ho_Chi_Minh',day,month,startedAt:data.startedAt,storageError,today:result({...blank(),...data.days[day]?.[model]}),monthUsage:result(monthly),quotaRemaining:null,scope:'backend',storageMode:file?'file':'memory'}
   }
   return {record,summary}
 }
