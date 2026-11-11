@@ -8,7 +8,7 @@ export function createGeminiClient({ apiKey, ai } = {}) {
   return { responses: { create: async request => {
     const result = await google.models.generateContent({
       model: request.model,
-      contents: request.audio ? [{ text: request.input }, { inlineData: { mimeType: request.audio.mimeType, data: request.audio.data } }] : request.input,
+      contents: request.messages ? request.messages.map(message=>({role:message.role==='assistant'?'model':'user',parts:[{text:message.content}]})) : request.audio ? [{ text: request.input }, { inlineData: { mimeType: request.audio.mimeType, data: request.audio.data } }] : request.input,
       config: {
         systemInstruction: request.instructions,
         responseMimeType: 'application/json',

@@ -39,7 +39,7 @@ export default function HomePage() {
       {folders?.length === 0 && <p className="border-t border-slate-100 px-6 py-6 text-center text-sm text-slate-500">Chưa có thư mục. Bấm “Thêm folder” để tạo bộ thẻ đầu tiên.</p>}
     </section>
     <p className="shrink-0 text-xs leading-6 text-slate-500">Số thẻ ở thư mục cha bao gồm các thư mục con. Mới là thẻ chưa học; Học là thẻ đang học hoặc học lại; Đến hạn là thẻ cần ôn theo lịch FSRS.</p>
-    <div className="flex shrink-0 flex-wrap justify-center gap-3"><button type="button" onClick={() => addVocabulary()} className="secondary"><Plus size={17} />Thêm từ vựng</button><Link to="/review" className="primary">Ôn tập tất cả</Link></div>
+    <div className="flex shrink-0 flex-wrap justify-center gap-3"><button type="button" onClick={() => addVocabulary()} className="secondary"><Plus size={17} />Thêm từ vựng</button><Link to="/review?folder=all" className="primary">Ôn tập tất cả</Link></div>
     {addingFolder && <FolderDialog open onOpenChange={setAddingFolder} onSaved={() => setAddingFolder(false)} />}
   </main>
 }

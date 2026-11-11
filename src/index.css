@@ -152,3 +152,26 @@ button, a, input, select, textarea { outline-offset: 4px; }
  .reading-columns[data-notes-hidden="true"] .study-notes-add,
  .reading-columns[data-notes-hidden="true"] .study-notes-content { display: none; }
 }
+
+/* Keep the review surface a centered flashcard rather than a full-width canvas. */
+.review-layout { max-width: 52rem; margin-right: auto; margin-left: auto; }
+.study-card-stage { display: flex; flex: 1 1 0%; min-height: 0; align-items: center; justify-content: center; padding: .5rem .25rem 1rem; }
+.study-card-stage .study-flashcard { width: 100%; max-width: 46rem; height: min(35rem, 100%); flex: 0 1 auto; border-radius: 1.5rem; border-color: #dce7e2; box-shadow: 0 12px 32px -18px rgb(15 70 48 / .24), 0 2px 6px rgb(15 70 48 / .04); }
+.study-flashcard > [aria-live] > div:first-child { min-height: 15rem; padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.study-flashcard > div:first-child { background: #fff; }
+.study-flashcard > div:last-child { background: #f8faf9; }
+@media (max-width: 639px) {
+ .study-card-stage { padding: 0 0 .25rem; }
+ .study-card-stage .study-flashcard { height: 100%; border-radius: 1.125rem; }
+ .study-flashcard > [aria-live] > div:first-child { min-height: 11rem; padding-top: 1.25rem; padding-bottom: 1.25rem; }
+}
+.ai-chat-launcher { right: 1.25rem; bottom: max(1rem, env(safe-area-inset-bottom)); }
+.ai-chat-panel { right: 1.25rem; bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.75rem); width: min(25rem, calc(100vw - 1.5rem)); height: min(36rem, calc(100dvh - 6rem - env(safe-area-inset-bottom))); }
+@media (max-width: 639px) {
+ .ai-chat-launcher { right: .75rem; }
+ .ai-chat-panel { right: .75rem; border-radius: 1rem; }
+}
+@media (max-width: 639px) {
+ body:has(.review-page) .ai-chat-launcher { bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+ body:has(.review-page) .ai-chat-panel { bottom: calc(9.25rem + env(safe-area-inset-bottom)); height: min(36rem, calc(100dvh - 11rem - env(safe-area-inset-bottom))); }
+}

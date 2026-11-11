@@ -281,3 +281,9 @@ AI review schema compatibility: chỉ gửi cấu trúc JSON gọn (object/prope
 Bôi đen một từ hoặc cụm từ trong nội dung để mở menu gồm Thêm từ vựng, Phát âm (giọng đọc trình duyệt, không gọi AI) và Thêm vào cache. Cache là bảng IndexedDB `vocabularyCache` trong database riêng của tài khoản (version 7), giữ lại sau khi tải lại trang. Cache không tự tạo thẻ, không gửi lên Supabase và không thuộc bản export thư viện từ vựng.
 
 Trong AI generator, Điền từ cache ghép các mục vào danh sách đang nhập, bỏ trùng và giới hạn 20 mục. Phần dư vẫn giữ trong cache cho lượt sau. Nút Danh sách cache cho xem và xóa từng mục. Điền hoặc AI gen chưa làm mất cache; chỉ các từ đầu vào đã được lưu thành thẻ thành công mới bị xóa khỏi cache.
+
+## Chat AI tạm thời
+
+Nút chat ở góc dưới bên phải mở một khung trò chuyện với Gemini, dùng model/key backend hiện tại. Tin nhắn chỉ giữ trong React state theo phiên đăng nhập: đóng/mở khung hoặc chuyển trang vẫn giữ, tải lại trang/đăng xuất/đổi tài khoản sẽ xóa. Không lưu lịch sử vào Supabase, IndexedDB, localStorage hoặc file máy chủ. Backend `/api/ai/chat` nhận ngữ cảnh gần đây cho từng request rồi trả câu trả lời; thống kê usage chỉ ghi model/số token/số lượt như các tính năng AI khác, không ghi nội dung chat. Nội dung gửi vẫn được Gemini xử lý theo chính sách dịch vụ của nhà cung cấp.
+
+Client gửi tối đa 19 tin nhắn gần đây, tổng tối đa 10.000 ký tự; mỗi tin nhắn trong request tối đa 3.000 ký tự. Hỗ trợ Enter để gửi, Shift+Enter xuống dòng, dừng chờ phản hồi và xóa cuộc trò chuyện trên máy. Không có công cụ truy cập/sửa dữ liệu ứng dụng từ chat. Không cần migration hoặc biến môi trường mới; khởi động lại/deploy backend để có endpoint mới.
