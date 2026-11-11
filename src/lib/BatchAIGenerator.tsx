@@ -13,7 +13,7 @@ import { aiTemplate, rowToNote, hasWordFamily, needsSpellingReview, type Spellin
 import { generateCards } from './cards'
 import { db } from './db'
 
-export default function BatchAIGenerator({ folderId, onBusy }: { folderId: string; onBusy: (busy: boolean) => void }) {
+export default function BatchAIGenerator({ folderId, onBusy, initialWords=[] }: { folderId: string; initialWords?: string[]; onBusy: (busy: boolean) => void }) {
   const folders = useLiveQuery(() => db.folders.toArray())
   const template = aiTemplate
   const sourceField = aiTemplate.fields[0].id
@@ -27,7 +27,7 @@ export default function BatchAIGenerator({ folderId, onBusy }: { folderId: strin
     })
     return () => cancelAnimationFrame(frame)
   }, [inputVersion])
-  const [words, setWords] = useState<string[]>([])
+  const [words, setWords] = useState<string[]>(()=>initialWords.slice(0,20))
   const [tags, setTags] = useState('')
   const [rows, setRows] = useState<BatchRow[]>([])
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null)

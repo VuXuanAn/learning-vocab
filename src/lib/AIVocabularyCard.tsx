@@ -1,3 +1,4 @@
+import ReadingSources from './ReadingSources'
 import RelatedWords from './RelatedWords'
 ﻿import type { Note } from './cards'
 import { hasWordFamily } from './ai-batch'
@@ -15,6 +16,7 @@ export default function AIVocabularyCard({ note, revealed, reversed = false, aut
       <p className="whitespace-pre-wrap break-words text-xl font-semibold text-emerald-800">{meaning}</p>
       {values['Câu ví dụ'] && <div className="rounded-xl bg-slate-50 p-4"><p className="whitespace-pre-wrap break-words text-lg text-slate-700">{values['Câu ví dụ']}</p>{values['Dịch câu ví dụ'] && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-500">{values['Dịch câu ví dụ']}</p>}</div>}
       {family && <RelatedWords note={note} text={family}/>}
+      <ReadingSources note={note}/>
     </div>}
   </div>
 }

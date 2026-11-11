@@ -58,5 +58,5 @@ export default function VocabularySyncProvider({ children }: { children: ReactNo
    useVocabularySyncState.setState({ready:false,status:{phase:'idle'},pending:false,firstSync:true,lastSyncAt:undefined,canRestore:false,sync:()=>{},restore:async()=>{}})
   }
  },[userId])
- return <>{status.phase==='error'&&<p role="alert" className="mx-auto max-w-7xl px-6 pt-4 text-sm text-amber-700">{rowSyncErrorMessage(status.error)}</p>}{children}</>
+ return <>{status.phase==='error'&&<p role="alert" className="workspace-sync-alert shrink-0 px-6 py-2 text-sm text-amber-700">{rowSyncErrorMessage(status.error)}</p>}{children}</>
 }

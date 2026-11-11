@@ -1,3 +1,5 @@
+import StyledSelect from '@/components/ui/styled-select'
+import VocabularyFolderSelect from '../lib/VocabularyFolderSelect'
 import VocabularyFooter from '../lib/VocabularyFooter'
 import { saveNotesToFolder } from '../lib/folder-storage'
 import BatchAIGenerator from '../lib/BatchAIGenerator'
@@ -12,7 +14,7 @@ import type { CardTemplate } from '../lib/templates'
 import { db } from '../lib/db'
 import { generateCards, noteLabels, type Note, type NoteKind } from '../lib/cards'
 
-export default function AddVocabularyForm({ initialFolderId = '' }: { initialFolderId?: string }) {
+export default function AddVocabularyForm({ initialFolderId = '', initialWords = [] }: { initialFolderId?: string; initialWords?: string[] }) {
   const [folderId, setFolderId] = useState(initialFolderId)
   const folders = useLiveQuery(() => db.folders.filter(folder => folder.permission !== 'viewer').toArray())
   const [showEditor, setShowEditor] = useState(false)
@@ -62,9 +64,9 @@ export default function AddVocabularyForm({ initialFolderId = '' }: { initialFol
     } catch { toast.error('Không thể lưu. Hãy kiểm tra quyền lưu dữ liệu của trình duyệt.') }
     finally { setSaving(false) }
   }
-  const kindControl = (<div><div className="mb-2 flex items-center justify-between"><label className="mb-0" htmlFor="kind">Kiểu thẻ</label><button type="button" disabled={generating || saving} className="text-sm font-semibold text-emerald-700" onClick={() => setShowEditor(true)}>+ Tạo kiểu mới</button></div><select id="kind" disabled={generating || saving} value={kind === 'custom' ? selectedTemplate?.id : kind} onChange={event => { const template = templates?.find(item => item.id === event.target.value); if (template) selectTemplate(template); else changeKind(event.target.value as NoteKind) }}>{Object.entries(noteLabels).filter(([value]) => value !== 'custom').map(([value, label]) => <option key={value} value={value}>{label}</option>)}{templates?.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</select></div>)
-  const folderControl = (<div><label htmlFor="note-folder">Lưu vào thư mục *</label><select required id="note-folder" disabled={generating || saving} value={folderId} onChange={event => { setFolderId(event.target.value); resetPreview() }}><option value="" disabled>Chọn thư mục</option>{folders?.map(folder => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>{folders?.length === 0 && <p className="mt-2 text-xs text-amber-700">Chưa có thư mục. Hãy tạo thư mục ở trang Bộ thẻ trước.</p>}</div>)
-  if (kind === 'ai') return <div className="space-y-5">{showEditor && <TemplateEditor onClose={() => setShowEditor(false)} onSaved={template => { selectTemplate(template); setShowEditor(false) }} />}<div className="grid items-start gap-4 sm:grid-cols-2">{kindControl}{folderControl}</div><BatchAIGenerator folderId={folderId} onBusy={setGenerating} /></div>
+  const kindControl = (<div><div className="mb-2 flex items-center justify-between"><label className="mb-0" htmlFor="kind">Kiểu thẻ</label><button type="button" disabled={generating || saving} className="text-sm font-semibold text-emerald-700" onClick={() => setShowEditor(true)}>+ Tạo kiểu mới</button></div><StyledSelect id="kind" disabled={generating || saving} value={kind === 'custom' ? selectedTemplate?.id : kind} onChange={event => { const template = templates?.find(item => item.id === event.target.value); if (template) selectTemplate(template); else changeKind(event.target.value as NoteKind) }}>{Object.entries(noteLabels).filter(([value]) => value !== 'custom').map(([value, label]) => <option key={value} value={value}>{label}</option>)}{templates?.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</StyledSelect></div>)
+  const folderControl = (<div><label htmlFor="note-folder">Lưu vào thư mục *</label><VocabularyFolderSelect id="note-folder" disabled={generating || saving} value={folderId} folders={folders??[]} onChange={value=>{setFolderId(value);resetPreview()}}/>{folders?.length === 0 && <p className="mt-2 text-xs text-amber-700">Chưa có thư mục. Hãy tạo thư mục ở trang Bộ thẻ trước.</p>}</div>)
+  if (kind === 'ai') return <div className="space-y-5">{showEditor && <TemplateEditor onClose={() => setShowEditor(false)} onSaved={template => { selectTemplate(template); setShowEditor(false) }} />}<div className="grid items-start gap-4 sm:grid-cols-2">{kindControl}{folderControl}</div><BatchAIGenerator initialWords={initialWords} folderId={folderId} onBusy={setGenerating} /></div>
   return (
     <div>
         {showEditor && <TemplateEditor onClose={() => setShowEditor(false)} onSaved={template => { selectTemplate(template); setShowEditor(false) }} />}

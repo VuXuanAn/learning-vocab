@@ -52,3 +52,42 @@ button, a, input, select, textarea { outline-offset: 4px; }
 }
 
 @media (forced-colors: active) { select { appearance: auto; background-image: none; } }
+
+.reading-content { line-height: 1.9; color: #334155; white-space: pre-line; }
+.reading-content p, .reading-content ul, .reading-content ol, .reading-content blockquote, .reading-content table, .reading-content pre { margin: 0 0 1.1em; }
+.reading-content h1, .reading-content h2, .reading-content h3, .reading-content h4 { font-weight: 650; line-height: 1.4; margin: 1.2em 0 .6em; color: #172c28; }
+.reading-content h1 { font-size: 1.8rem; } .reading-content h2 { font-size: 1.5rem; } .reading-content h3 { font-size: 1.2rem; }
+.reading-content ul { list-style: disc; padding-left: 1.5em; } .reading-content ol { list-style: decimal; padding-left: 1.5em; }
+.reading-content blockquote { border-left: 3px solid #a7f3d0; padding-left: 1em; color: #64748b; }
+.reading-content table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+.reading-content td, .reading-content th { border: 1px solid #e2e8f0; padding: .5em .8em; }
+.reading-content pre { overflow-x: auto; border-radius: .5rem; background: #f1f5f9; padding: 1em; }
+.reading-content a { color: #047857; text-decoration: underline; text-underline-offset: 3px; }
+.reading-content .reading-vocab-link { background: #ecfdf5; text-decoration-style: dotted; border-radius: 3px; }
+.reading-content .reading-vocab-link:hover { background: #d1fae5; }
+
+/* The signed-in workspace owns its viewport. Each page chooses its scroll regions. */
+.app-workspace { position: fixed; inset: 0; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.workspace-page { display: flex; flex-direction: column; flex: 1 1 0%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
+.workspace-page > :not(.reading-columns):not(.reading-list):not(.speaking-body):not(section) { flex-shrink: 0; }
+.workspace-scroll { flex: 1 1 0%; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.reading-columns { grid-template-rows: minmax(0, 1fr); }
+.speaking-body { flex: 1 1 0%; min-height: 0; min-width: 0; }
+.speaking-detail-body { display: flex; flex-direction: column; gap: 1rem; overflow: hidden; }
+.speaking-detail-body > :not(.speaking-detail-panels) { flex-shrink: 0; }
+.speaking-detail-panels { display: grid; flex: 1 1 0%; min-height: 0; gap: 1.25rem; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.speaking-reference-panel, .speaking-recordings-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
+.reading-content-panel .reading-content, .reading-columns > aside > p, .speaking-reference-panel > p { scrollbar-gutter: stable; }
+@media (max-width: 767px) {
+ .reading-columns { grid-template-rows: minmax(0, 2fr) minmax(0, 1fr); }
+ .speaking-detail-panels { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+ .workspace-page { padding-bottom: 1rem; }
+}
+.review-layout > :not(.review-session) { flex-shrink: 0; }
+.review-layout > section:not(.review-session) { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.review-session > :not(article) { flex-shrink: 0; }
+.review-session article > :not([aria-live]) { flex-shrink: 0; }
+.review-page[data-focus-mode="true"] .review-session { justify-content: center; }
+.vocab-folders-page [data-slot="table-container"], .card-manager-page [data-slot="table-container"] { overflow: visible; }
+.review-layout > section:not(.review-session) { flex: 1 1 0%; }
+.reading-content .reading-source-highlight { background: #fef08a; outline: 2px solid #facc15; outline-offset: 2px; }

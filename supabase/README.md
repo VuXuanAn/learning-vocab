@@ -4,6 +4,8 @@ Frontend dùng trực tiếp các bảng `folders`, `folder_members`, `notes`, `
 
 ## SQL cần chạy
 
+Reading: chạy thêm `migrations/011_reading_library.sql` để tạo bảng thư mục/bài đọc, sau đó `migrations/012_reading_study_notes.sql` cho ghi chú học tập có loại (ngữ pháp/cấu trúc câu/cách diễn đạt/khác), với RLS theo tài khoản. Chi tiết lưu trữ, HTML và Detect vocab tại [READING.md](READING.md).
+
 Mở Supabase Dashboard → SQL Editor bằng role postgres:
 
 1. `migrations/002_user_preferences.sql`: cài đặt cá nhân.
