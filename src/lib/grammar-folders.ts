@@ -1,4 +1,5 @@
 import type { GrammarFolder } from './grammar-types'
+import { sortGrammarItems } from './grammar-order'
 export function grammarFolderIds(id:string,folders:GrammarFolder[]){
  const ids=new Set([id])
  let changed=true
@@ -7,7 +8,7 @@ export function grammarFolderIds(id:string,folders:GrammarFolder[]){
 }
 export function grammarFolderRows(folders:GrammarFolder[],collapsed=new Set<string>()){
  const children=new Map<string,GrammarFolder[]>(),ids=new Set(folders.map(folder=>folder.id))
- for(const folder of folders){const parent=folder.parentId&&ids.has(folder.parentId)?folder.parentId:'';const list=children.get(parent)??[];list.push(folder);children.set(parent,list)}
+ for(const folder of sortGrammarItems(folders)){const parent=folder.parentId&&ids.has(folder.parentId)?folder.parentId:'';const list=children.get(parent)??[];list.push(folder);children.set(parent,list)}
  const rows:{folder:GrammarFolder;depth:number;hasChildren:boolean}[]=[],visited=new Set<string>()
  function visit(folder:GrammarFolder,depth:number,hidden=false){
   if(visited.has(folder.id))return

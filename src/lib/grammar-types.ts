@@ -8,6 +8,7 @@ export interface GrammarDocument {
  notes:string
 }
 export interface GrammarEntry {
+ sortOrder?:number
  name?:string
  category?:string
  level?:string
@@ -32,6 +33,7 @@ export interface GrammarEntry {
 }
 
 export interface GrammarFolder {
+ sortOrder?:number
  parentId?:string
  id:string
  ownerId:string

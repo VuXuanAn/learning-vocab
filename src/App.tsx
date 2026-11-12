@@ -1,3 +1,4 @@
+import QuickGrammarSearch from './lib/QuickGrammarSearch'
 import IrregularVerbsPage from './pages/IrregularVerbsPage'
 import LearningRail from './lib/LearningRail'
 import GrammarSyncProvider from './lib/GrammarSyncProvider'
@@ -39,5 +40,5 @@ function ProtectedLayout() {
   const { session, loading } = useAuth()
   if (loading) return <main className="p-12 text-center text-slate-500" role="status">Đang kiểm tra đăng nhập…</main>
   if (!session) return <Navigate to="/" replace/>
-  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><VocabularySyncProvider><GrammarSyncProvider><AddVocabularyProvider><MeaningReminderProvider><div className="learning-layout"><div className="learning-content"><Outlet/></div><LearningRail/></div></MeaningReminderProvider></AddVocabularyProvider></GrammarSyncProvider></VocabularySyncProvider></PreferencesSyncProvider></AccountWorkspace>
+  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><VocabularySyncProvider><GrammarSyncProvider><AddVocabularyProvider><MeaningReminderProvider><QuickGrammarSearch/><div className="learning-layout"><div className="learning-content"><Outlet/></div><LearningRail/></div></MeaningReminderProvider></AddVocabularyProvider></GrammarSyncProvider></VocabularySyncProvider></PreferencesSyncProvider></AccountWorkspace>
 }

@@ -7,11 +7,74 @@ import Dexie from 'dexie'
 const url=source=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64')
 const dbUrl=url(readFileSync('src/lib/db.ts','utf8').replace("'dexie'",JSON.stringify(import.meta.resolve('dexie'))))
 const {VocabDatabase}=await import(dbUrl)
+const orderUrl=url(readFileSync('src/lib/grammar-order.ts','utf8'))
 const documentUrl=url(readFileSync('src/lib/grammar-document.ts','utf8'))
-const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
+const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder,moveGrammarItem}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-order'",JSON.stringify(orderUrl)).replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
 const now=()=>new Date().toISOString()
 const folderRow=(ownerId='owner')=>({id:crypto.randomUUID(),ownerId,name:'Grammar',nameKey:'grammar',createdAt:now(),updatedAt:now()})
 const entryRow=folder=>({id:crypto.randomUUID(),ownerId:folder.ownerId,folderId:folder.id,title:'My grammar',topic:'',structure:'S + V',usage:'Cách dùng',example:'An example.',translation:'Ví dụ.',notes:'My notes',status:'review',createdAt:now(),updatedAt:now()})
+
+test('Reorder persists sibling positions, preserves content and hierarchy, and rejects foreign ownership',async()=>{
+ const {sortGrammarItems}=await import(orderUrl)
+ const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+ const db=new VocabDatabase('grammar-order-'+crypto.randomUUID())
+ try{
+  const first=await saveGrammarFolder({...folderRow(),name:'First',createdAt:'2026-01-01'},db)
+  const second=await saveGrammarFolder({...folderRow(),name:'Second',createdAt:'2026-01-02'},db)
+  const child=await saveGrammarFolder({...folderRow(),name:'Child',parentId:first.id},db)
+  assert.equal(await moveGrammarItem('grammarFolders',second.id,1,'owner',db),false)
+  await moveGrammarItem('grammarFolders',second.id,-1,'owner',db)
+  assert.deepEqual(grammarFolderRows(await db.grammarFolders.toArray()).map(row=>row.folder.id),[second.id,first.id,child.id])
+  assert.equal((await db.grammarFolders.get(child.id)).parentId,first.id)
+  assert.equal((await db.grammarFolders.get(child.id)).sortOrder,undefined)
+  const a=await saveGrammarEntry({...entryRow(first),title:'A',createdAt:'2026-01-01'},db)
+  const b=await saveGrammarEntry({...entryRow(first),title:'B',createdAt:'2026-01-02'},db)
+  const outsider=await saveGrammarEntry({...entryRow(second),title:'Other folder'},db)
+  await moveGrammarItem('grammarEntries',a.id,-1,'owner',db)
+  assert.deepEqual(sortGrammarItems(await db.grammarEntries.where('folderId').equals(first.id).toArray(),true).map(row=>row.id),[a.id,b.id])
+  assert.equal((await db.grammarEntries.get(outsider.id)).sortOrder,undefined)
+  const ordered=await db.grammarEntries.get(a.id)
+  assert.equal(ordered.structure,a.structure);assert.equal(ordered.notes,a.notes)
+  assert.notEqual(ordered.updatedAt,a.updatedAt)
+  const saved=await saveGrammarEntry({...ordered,notes:'Edited after reorder'},db)
+  assert.equal(saved.sortOrder,0)
+  const wire=encodeRow('grammarEntries',saved)
+  assert.equal(decodeRow('grammarEntries',{id:saved.id,owner_id:saved.ownerId,folder_id:saved.folderId,...wire}).sortOrder,0)
+  const savedFolder=await saveGrammarFolder({...await db.grammarFolders.get(second.id),name:'Renamed'},db)
+  assert.equal(savedFolder.sortOrder,0)
+  await assert.rejects(()=>moveGrammarItem('grammarEntries',a.id,1,'other',db))
+  await assert.rejects(()=>moveGrammarItem('grammarFolders',second.id,1,'other',db))
+  db.close();await db.open()
+  assert.equal((await db.grammarEntries.get(a.id)).sortOrder,0)
+  assert.equal((await db.grammarFolders.get(second.id)).sortOrder,0)
+ }finally{await db.delete()}
+})
+
+test('Drag-drop moves across multiple siblings without swapping intervening items and rejects another group',async()=>{
+ const {sortGrammarItems}=await import(orderUrl)
+ const db=new VocabDatabase('grammar-drag-'+crypto.randomUUID())
+ try{
+  const roots=[]
+  for(let index=0;index<4;index++)roots.push(await saveGrammarFolder({...folderRow(),name:'Folder '+index,createdAt:'2026-01-0'+(index+1)},db))
+  const child=await saveGrammarFolder({...folderRow(),name:'Child',parentId:roots[0].id},db)
+  await moveGrammarItem('grammarFolders',roots[3].id,roots[0].id,'owner',db)
+  const tree=grammarFolderRows(await db.grammarFolders.toArray())
+  assert.deepEqual(tree.map(row=>row.folder.id),[roots[3].id,roots[0].id,child.id,roots[1].id,roots[2].id])
+  await assert.rejects(()=>moveGrammarItem('grammarFolders',child.id,roots[0].id,'owner',db))
+  const entries=[]
+  for(let index=0;index<4;index++)entries.push(await saveGrammarEntry({...entryRow(roots[0]),createdAt:'2026-01-0'+(index+1)},db))
+  // Initial order is newest first: 3, 2, 1, 0. Move 0 to 3, then 0 back to 1.
+  await moveGrammarItem('grammarEntries',entries[0].id,entries[3].id,'owner',db)
+  const ordered=async()=>sortGrammarItems(await db.grammarEntries.where('folderId').equals(roots[0].id).toArray(),true).map(row=>row.id)
+  assert.deepEqual(await ordered(),[entries[0].id,entries[3].id,entries[2].id,entries[1].id])
+  await moveGrammarItem('grammarEntries',entries[0].id,entries[1].id,'owner',db)
+  assert.deepEqual(await ordered(),[entries[3].id,entries[2].id,entries[1].id,entries[0].id])
+  const other=await saveGrammarEntry(entryRow(roots[1]),db)
+  await assert.rejects(()=>moveGrammarItem('grammarEntries',entries[0].id,other.id,'owner',db))
+  assert.deepEqual(await ordered(),[entries[3].id,entries[2].id,entries[1].id,entries[0].id])
+  assert.equal(await moveGrammarItem('grammarEntries',entries[0].id,entries[0].id,'owner',db),false)
+ }finally{await db.delete()}
+})
 
 test('Structured grammar retains formulas, usage ids and paired examples through edits and cloud encoding',async()=>{
  const {withGrammarDocument,grammarDocument}=await import(documentUrl)
@@ -118,7 +181,7 @@ test('Grammar folders validate names and ownership, move entries and only delete
  }finally{await db.delete()}
 })
 
-const {grammarFolderIds,grammarFolderRows,grammarFolderPath}=await import(url(readFileSync('src/lib/grammar-folders.ts','utf8')))
+const {grammarFolderIds,grammarFolderRows,grammarFolderPath}=await import(url(readFileSync('src/lib/grammar-folders.ts','utf8').replace("'./grammar-order'",JSON.stringify(orderUrl))))
 test('Grammar tree indents children, collapses entire branches and counts descendants',()=>{
  const root=folderRow(),child={...folderRow(),parentId:root.id},grandchild={...folderRow(),parentId:child.id},other=folderRow()
  const folders=[root,other,grandchild,child]
