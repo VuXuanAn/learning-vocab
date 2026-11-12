@@ -54,7 +54,9 @@ test('Grammar uploads existing local data, restores reading sources on another d
   await f.cycle()
   assert.deepEqual(f.writes.map(row=>row.table),['grammarFolders','grammarEntries'])
   await syncRowCycle(other,f.transport)
-  assert.deepEqual(await other.grammarEntries.get('ge'),entry)
+  const {structure,...expected}=entry
+  assert.deepEqual(await other.grammarEntries.get('ge'),{...expected,structures:[{id:1,type:'',formula:structure}],sources:entry.sources.map(source=>({...source,pattern:structure}))})
+  assert.equal(Object.hasOwn(f.cloud.grammarEntries.get('ge').data,'structure'),false)
   assert.deepEqual(await other.grammarFolders.get('gf'),folder)
   await f.db.grammarEntries.update('ge',{notes:'Edited'})
   await f.cycle();await syncRowCycle(other,f.transport)

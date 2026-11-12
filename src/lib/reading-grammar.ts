@@ -1,4 +1,5 @@
 export interface GrammarSource {
+ pattern?:string
  exactSelection?:boolean
  articleId:string
  articleTitle:string
@@ -41,7 +42,7 @@ export function grammarKeywordIndices(quote:string,structure:string){
  }
  return chosen
 }
-export function grammarHighlightRanges(source:GrammarSource,structure:string){
+export function grammarHighlightRanges(source:GrammarSource,structure=source.pattern??''){
  if(source.exactSelection)return source.highlights
  const tokens=grammarTokens(source.quote)
  const allSelected=tokens.length>0&&tokens.every(token=>source.highlights.some(range=>range.start<=source.start+token.start&&range.end>=source.start+token.end))

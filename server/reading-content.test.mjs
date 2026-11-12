@@ -284,3 +284,15 @@ test('Detect does not split ordinary hyphenated cards and still links built-in v
  assert.equal(sell.matches[0].noteId,'irregular:sell')
  assert.equal(sell.suggestions.length,0)
 })
+
+
+test('Reading highlights use source patterns without requiring a grammar structure summary',()=>{
+ const html='<p>They freed our ancestors from it.</p>'
+ const quote='freed our ancestors from',start=6
+ const source={articleId:'article',contentHtml:html,quote,start,end:start+quote.length,pattern:'free … from',highlights:[{start,end:start+quote.length}]}
+ const entry={id:'grammar',folderId:'folder',title:'Free from',source}
+ const displayed=root(highlightReadingGrammar(html,html,[entry],'article'))
+ assert.deepEqual([...displayed.querySelectorAll('mark')].map(mark=>mark.textContent),['freed','from'])
+ assert.equal(displayed.querySelector('a').title,'Free from')
+ assert.equal(displayed.querySelector('a').getAttribute('href'),'/grammar?folder=folder&grammar=grammar')
+})

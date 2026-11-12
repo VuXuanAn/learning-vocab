@@ -41,7 +41,7 @@ test('Reorder persists sibling positions, preserves content and hierarchy, and r
   assert.deepEqual(sortGrammarItems(await db.grammarEntries.where('folderId').equals(first.id).toArray(),true).map(row=>row.id),[a.id,b.id])
   assert.equal((await db.grammarEntries.get(outsider.id)).sortOrder,undefined)
   const ordered=await db.grammarEntries.get(a.id)
-  assert.equal(ordered.structure,a.structure);assert.equal(ordered.notes,a.notes)
+  assert.deepEqual(ordered.structures,a.structures);assert.equal(ordered.notes,a.notes)
   assert.notEqual(ordered.updatedAt,a.updatedAt)
   const saved=await saveGrammarEntry({...ordered,notes:'Edited after reorder'},db)
   assert.equal(saved.sortOrder,0)
@@ -114,7 +114,7 @@ test('Grammar starts empty and persists user content, line breaks and account is
   assert.equal(await a.grammarEntries.count(),0);assert.equal(await a.grammarFolders.count(),0)
   const folder=await saveGrammarFolder(folderRow('a'),a)
   const row=await saveGrammarEntry({...entryRow(folder),structure:'S + V\n\nSecond line'},a)
-  assert.equal(row.structure,'S + V\n\nSecond line')
+  assert.equal(row.structures[0].formula,'S + V\n\nSecond line');assert.equal(Object.hasOwn(row,'structure'),false)
   await assert.rejects(()=>saveGrammarEntry({...row,title:'  '},a))
   await assert.rejects(()=>saveGrammarEntry({...row,ownerId:'other'},a))
   await assert.rejects(()=>deleteGrammarEntry({...row,ownerId:'other'},a))
@@ -178,7 +178,7 @@ test('Grammar folders validate names and ownership, move entries and only delete
   await assert.rejects(()=>saveGrammarEntry({...entry,folderId:foreign.id},db))
   await assert.rejects(()=>saveGrammarEntry({...entry,folderId:crypto.randomUUID()},db))
   const moved=await saveGrammarEntry({...entry,folderId:folder.id},db)
-  assert.equal(moved.folderId,folder.id);assert.equal(moved.structure,entry.structure)
+  assert.equal(moved.folderId,folder.id);assert.deepEqual(moved.structures,entry.structures)
   const renamed=await saveGrammarFolder({...folder,name:'Verb tenses'},db)
   assert.equal((await db.grammarEntries.get(entry.id)).folderId,renamed.id)
   await saveGrammarEntry({...moved,folderId:original.id},db)
@@ -236,7 +236,7 @@ test('Reading grammar persists selected highlight ranges and rejects stale sourc
   // Canonical passage offsets include the paragraph delimiter.
   source.end=source.start+source.quote.length;source.highlights[1]={start:source.end-4,end:source.end}
   const saved=await saveGrammarEntry({...entryRow(folder),source},db)
-  assert.deepEqual(saved.source,source)
+  assert.deepEqual(saved.source,{...source,pattern:'S + V'})
   db.close();await db.open()
   assert.deepEqual((await db.grammarEntries.get(saved.id)).source.highlights,source.highlights)
   await assert.rejects(()=>saveGrammarEntry({...entryRow(folder),source:{...source,highlights:[{start:0,end:2}]}},db),/tô sáng/)
@@ -261,9 +261,9 @@ test('Manual grammar assignment preserves existing sources, validates ownership 
   const assigned={...source,start:6,end:33,quote:'are thought to have arrived',exactSelection:true,highlights:[{start:6,end:33}]}
   assigned.end=assigned.start+assigned.quote.length;assigned.highlights[0].end=assigned.end
   const saved=await saveGrammarEntry({...original,sources:[assigned]},db)
-  assert.deepEqual(saved.source,source)
+  assert.deepEqual(saved.source,{...source,pattern:'S + V'})
   assert.deepEqual(saved.sources,[assigned])
-  assert.equal(saved.structure,original.structure)
+  assert.deepEqual(saved.structures,original.structures)
   db.close();await db.open()
   assert.deepEqual((await db.grammarEntries.get(saved.id)).sources,[assigned])
   await assert.rejects(()=>saveGrammarEntry({...saved,sources:[{...assigned,highlights:[{start:0,end:2}]}]},db),/tô sáng/)
@@ -280,7 +280,7 @@ test('Free HTML grammar saves without a formula, strips unsafe markup, and survi
   const folder=await saveGrammarFolder(folderRow(),db)
   const saved=await saveGrammarEntry({...entryRow(folder),title:'Get to + V',structure:'',contentHtml:'<h2>Ý nghĩa</h2><p onclick="evil()">Có <strong>cơ hội</strong></p><ul><li>Ví dụ tự do</li></ul><table><tr><td>get to meet</td></tr></table><script>evil()</script><a href="javascript:evil()">bad</a>'},db)
   assert.equal(saved.title,'Get to + V')
-  assert.equal(saved.structure,'Get to + V')
+  assert.equal(Object.hasOwn(saved,'structure'),false)
   assert.ok(saved.contentHtml.includes('<strong>cơ hội</strong>'))
   assert.ok(saved.contentHtml.includes('<table>'))
   assert.ok(!/onclick|script|javascript:/.test(saved.contentHtml))
@@ -316,8 +316,8 @@ test('Converting an existing grammar to free HTML preserves Reading highlight so
   const source={articleId:article.id,articleTitle:article.title,contentHtml:article.contentHtml,start:1,end:12,quote:'get to meet',highlights:[{start:1,end:4},{start:5,end:7}]}
   const old=await saveGrammarEntry({...entryRow(folder),structure:'get to',source},db)
   const updated=await saveGrammarEntry({...old,contentHtml:grammarEntryHtml(old)},db)
-  assert.deepEqual(updated.source,source)
-  assert.equal(updated.structure,'get to')
+  assert.deepEqual(updated.source,{...source,pattern:'get to'})
+  assert.equal(Object.hasOwn(updated,'structure'),false)
  }finally{await db.delete()}
 })
 
@@ -357,4 +357,32 @@ test('Rich HTML keeps formatting while removing executable images, controls and 
  assert.equal(root.querySelector('mark').hasAttribute('data-color'),false)
  assert.equal(root.querySelectorAll('img,input').length,0)
  assert.equal(root.querySelector('[data-type],[data-checked]'),null)
+})
+
+
+test('Grammar without a structure field saves and legacy summary data migrates without losing Reading keywords',async()=>{
+ const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+ const db=new VocabDatabase('grammar-no-summary-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const {structure,...base}=entryRow(folder)
+  const fresh=await saveGrammarEntry({...base,contentHtml:'<p>Free grammar content.</p>'},db)
+  assert.equal(Object.hasOwn(fresh,'structure'),false)
+  assert.equal(Object.hasOwn(encodeRow('grammarEntries',fresh).data,'structure'),false)
+  const source={articleId:crypto.randomUUID(),articleTitle:'Reading',contentHtml:'<p>freed us from</p>',quote:'freed us from',start:1,end:14,highlights:[{start:1,end:14}]}
+  const legacy={...entryRow(folder),id:crypto.randomUUID(),structure:'free … from',source}
+  // Old records can still be edited after the original Reading passage is unavailable.
+  await db.grammarEntries.put(legacy)
+  const saved=await saveGrammarEntry({...legacy,contentHtml:grammarEntryHtml(legacy)},db)
+  assert.equal(Object.hasOwn(saved,'structure'),false)
+  assert.equal(saved.source.pattern,'free … from')
+  assert.ok(saved.contentHtml.includes('free … from'))
+  const wire=encodeRow('grammarEntries',legacy)
+  assert.equal(Object.hasOwn(wire.data,'structure'),false)
+  assert.equal(wire.data.structures[0].formula,'free … from')
+  assert.equal(wire.data.source.pattern,'free … from')
+  const restored=decodeRow('grammarEntries',{id:legacy.id,owner_id:legacy.ownerId,folder_id:legacy.folderId,data:legacy})
+  assert.equal(Object.hasOwn(restored,'structure'),false)
+  assert.equal(restored.source.pattern,'free … from')
+ }finally{await db.delete()}
 })

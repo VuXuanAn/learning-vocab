@@ -23,7 +23,8 @@ export interface GrammarEntry {
  folderId:string
  title:string
  topic:string
- structure:string
+ /** Compatibility when reading old entries; new saves omit this field. */
+ structure?:string
  usage:string
  example:string
  translation:string

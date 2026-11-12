@@ -129,7 +129,7 @@ export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,en
  const root=document.createElement('div');root.innerHTML=renderedHtml
  const {text,spans}=indexReadingRoot(root,true)
  const valid=entries.flatMap(entry=>[...(entry.source?[entry.source]:[]),...(entry.sources??[])].map(source=>({...entry,source}))).filter(entry=>(!articleId||entry.source.articleId===articleId)&&entry.source?.contentHtml===sourceHtml&&text.slice(entry.source.start,entry.source.end)===entry.source.quote)
- const ranges=valid.flatMap(entry=>grammarHighlightRanges(entry.source!,entry.structure).map(range=>({...range,id:entry.id,title:entry.structure})))
+ const ranges=valid.flatMap(entry=>grammarHighlightRanges(entry.source!,entry.source.pattern??entry.structure??'').map(range=>({...range,id:entry.id,title:entry.title??entry.structure??'Ngữ pháp'})))
  for(const span of spans){
   const relevant=ranges.filter(range=>range.start<span.end&&range.end>span.start)
   if(!relevant.length)continue
@@ -144,7 +144,7 @@ export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,en
  }
  // A grammar structure is one link, including the words between its highlighted keywords.
  const phrases=valid.map(entry=>{
-  const highlights=grammarHighlightRanges(entry.source!,entry.structure)
+  const highlights=grammarHighlightRanges(entry.source!,entry.source.pattern??entry.structure??'')
   return {entry,start:Math.min(...highlights.map(range=>range.start)),end:Math.max(...highlights.map(range=>range.end))}
  }).filter(phrase=>Number.isFinite(phrase.start)&&phrase.end>phrase.start).sort((a,b)=>a.start-b.start||b.end-a.end)
  const links:typeof phrases=[]
@@ -181,7 +181,7 @@ export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,en
   for(const anchor of contents.querySelectorAll('a'))anchor.replaceWith(...anchor.childNodes)
   const link=document.createElement('a')
   link.href='/grammar?folder='+encodeURIComponent(phrase.entry.folderId)+'&grammar='+encodeURIComponent(phrase.entry.id)
-  link.dataset.readingGrammar=phrase.entry.id;link.title=phrase.entry.structure;link.className='reading-grammar-link'
+  link.dataset.readingGrammar=phrase.entry.id;link.title=phrase.entry.title??phrase.entry.structure??'Ngữ pháp';link.className='reading-grammar-link'
   link.append(contents);range.insertNode(link)
  }
  return root.innerHTML
