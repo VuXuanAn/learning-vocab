@@ -7,7 +7,7 @@ import { confirmReadingMatches } from './reading-storage'
 import type { ReadingArticle, ReadingMatch } from './reading-types'
 import type { ReadingSuggestion } from './reading-similarity'
 export interface ReadingMatchReviewData {articleId:string;ownerId:string;detection:NonNullable<ReadingArticle['detection']>;suggestions:ReadingSuggestion[]}
-export default function ReadingMatchReview({data,onClose,onSync}:{data:ReadingMatchReviewData;onClose:()=>void;onSync:()=>Promise<void>}){
+export default function ReadingMatchReview({data,onClose,onSync,onConfirm}:{data:ReadingMatchReviewData;onClose:()=>void;onSync:()=>Promise<void>;onConfirm?:(matches:ReadingMatch[])=>Promise<void>}){
  const [choices,setChoices]=useState<Record<number,string>>({}),[busy,setBusy]=useState(false),[error,setError]=useState('')
  const selected=data.suggestions.filter((_,index)=>!!choices[index]).length
  async function save(){
@@ -17,7 +17,7 @@ export default function ReadingMatchReview({data,onClose,onSync}:{data:ReadingMa
     const candidate=row.candidates.find(item=>item.noteId===choices[index])
     return candidate?row.occurrences.map(occurrence=>({...occurrence,noteId:candidate.noteId,word:candidate.word,confirmed:true})):[]
    })
-   await confirmReadingMatches(data.articleId,data.ownerId,data.detection,matches)
+   await (onConfirm?onConfirm(matches):confirmReadingMatches(data.articleId,data.ownerId,data.detection,matches))
    onClose()
    try{await onSync();toast.success('Đã lưu các liên kết bạn xác nhận lên Supabase.')}
    catch{toast.warning('Đã lưu xác nhận trên máy, đang chờ đồng bộ Supabase.')}

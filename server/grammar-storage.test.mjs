@@ -4,12 +4,19 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import Dexie from 'dexie'
+import {JSDOM} from 'jsdom'
+import createDOMPurify from 'dompurify'
+const {window}=new JSDOM('')
+globalThis.document=window.document
+globalThis.__grammarPurify=createDOMPurify(window)
 const url=source=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64')
 const dbUrl=url(readFileSync('src/lib/db.ts','utf8').replace("'dexie'",JSON.stringify(import.meta.resolve('dexie'))))
 const {VocabDatabase}=await import(dbUrl)
 const orderUrl=url(readFileSync('src/lib/grammar-order.ts','utf8'))
 const documentUrl=url(readFileSync('src/lib/grammar-document.ts','utf8'))
-const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder,moveGrammarItem}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-order'",JSON.stringify(orderUrl)).replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
+const htmlUrl=url(readFileSync('src/lib/grammar-html.ts','utf8').replace("import DOMPurify from 'dompurify'",'const DOMPurify=globalThis.__grammarPurify').replace("'./grammar-document'",JSON.stringify(documentUrl)))
+const {grammarEntryHtml,grammarHtmlText,prepareGrammarHtml}=await import(htmlUrl)
+const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder,moveGrammarItem}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-html'",JSON.stringify(htmlUrl)).replace("'./grammar-order'",JSON.stringify(orderUrl)).replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
 const now=()=>new Date().toISOString()
 const folderRow=(ownerId='owner')=>({id:crypto.randomUUID(),ownerId,name:'Grammar',nameKey:'grammar',createdAt:now(),updatedAt:now()})
 const entryRow=folder=>({id:crypto.randomUUID(),ownerId:folder.ownerId,folderId:folder.id,title:'My grammar',topic:'',structure:'S + V',usage:'Cách dùng',example:'An example.',translation:'Ví dụ.',notes:'My notes',status:'review',createdAt:now(),updatedAt:now()})
@@ -263,4 +270,91 @@ test('Manual grammar assignment preserves existing sources, validates ownership 
   await db.readingArticles.update(article.id,{ownerId:'foreign'})
   await assert.rejects(()=>saveGrammarEntry({...saved,sources:[{...assigned,quote:'different'}]},db),/đã thay đổi/)
  }finally{await db.delete()}
+})
+
+
+test('Free HTML grammar saves without a formula, strips unsafe markup, and survives cloud encoding',async()=>{
+ const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+ const db=new VocabDatabase('grammar-html-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const saved=await saveGrammarEntry({...entryRow(folder),title:'Get to + V',structure:'',contentHtml:'<h2>Ý nghĩa</h2><p onclick="evil()">Có <strong>cơ hội</strong></p><ul><li>Ví dụ tự do</li></ul><table><tr><td>get to meet</td></tr></table><script>evil()</script><a href="javascript:evil()">bad</a>'},db)
+  assert.equal(saved.title,'Get to + V')
+  assert.equal(saved.structure,'Get to + V')
+  assert.ok(saved.contentHtml.includes('<strong>cơ hội</strong>'))
+  assert.ok(saved.contentHtml.includes('<table>'))
+  assert.ok(!/onclick|script|javascript:/.test(saved.contentHtml))
+  assert.ok(saved.usage.includes('cơ hội'))
+  const wire=encodeRow('grammarEntries',saved)
+  const decoded=decodeRow('grammarEntries',{id:saved.id,owner_id:saved.ownerId,folder_id:saved.folderId,...wire})
+  assert.equal(decoded.contentHtml,saved.contentHtml)
+  const imported=await saveGrammarEntry({...saved,usages:[{id:1,content:''}],examples:[{id:1,en:'',vi:''}]},db)
+  assert.deepEqual(imported.usages,[])
+  assert.deepEqual(imported.examples,[])
+  await assert.rejects(()=>saveGrammarEntry({...saved,contentHtml:'<p><br></p>'},db),/nội dung/)
+  await assert.rejects(()=>saveGrammarEntry({...saved,contentHtml:'<script>evil()</script>'},db),/nội dung/)
+  await assert.rejects(()=>saveGrammarEntry({...saved,ownerId:'foreign'},db),/thư mục/)
+ }finally{await db.delete()}
+})
+test('Legacy grammar converts all sections without executing embedded markup; plain notes retain line breaks',async()=>{
+ const {withGrammarDocument}=await import(documentUrl)
+ const folder=folderRow()
+ const old=withGrammarDocument(entryRow(folder),{name:'Custom',level:'B1',structures:[{id:1,type:'Loại',formula:'S + V < O'}],usages:[{id:1,content:'Cách dùng <script>test</script>'}],examples:[{id:1,en:'I get to meet people.',vi:'Tôi có cơ hội gặp mọi người.'}],notes:'Ghi chú tự do'})
+ const html=grammarEntryHtml(old)
+ for(const value of ['B1','Loại','S + V &lt; O','&lt;script&gt;test&lt;/script&gt;','I get to meet people.','Tôi có cơ hội gặp mọi người.','Ghi chú tự do'])assert.ok(html.includes(value),value)
+ assert.equal(grammarEntryHtml({...old,contentHtml:'<p>Edited</p>'}),'<p>Edited</p>')
+ const plain=prepareGrammarHtml('Dùng khi x < 10\nDòng tiếp theo & ví dụ')
+ assert.ok(plain.includes('&lt; 10<br>'))
+ assert.equal(grammarHtmlText(plain),'Dùng khi x < 10\nDòng tiếp theo & ví dụ')
+})
+test('Converting an existing grammar to free HTML preserves Reading highlight sources',async()=>{
+ const db=new VocabDatabase('grammar-html-source-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const article={id:crypto.randomUUID(),ownerId:'owner',title:'Reading',contentHtml:'<p>get to meet</p>'}
+  await db.readingArticles.put(article)
+  const source={articleId:article.id,articleTitle:article.title,contentHtml:article.contentHtml,start:1,end:12,quote:'get to meet',highlights:[{start:1,end:4},{start:5,end:7}]}
+  const old=await saveGrammarEntry({...entryRow(folder),structure:'get to',source},db)
+  const updated=await saveGrammarEntry({...old,contentHtml:grammarEntryHtml(old)},db)
+  assert.deepEqual(updated.source,source)
+  assert.equal(updated.structure,'get to')
+ }finally{await db.delete()}
+})
+
+
+test('Rich formatting, checklists and image dimensions survive saving and cloud encoding',async()=>{
+ const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+ const db=new VocabDatabase('grammar-rich-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const html='<p style="text-align: center; margin-left: 4em; line-height: 1.5"><span style="font-family: Georgia; font-size: 24px; color: #dc2626">Colored example</span><mark data-color="#fef08a" style="background-color:#fef08a">highlight</mark><sup>2</sup><sub>3</sub></p><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked><span></span></label><div><p>Remember this</p></div></li></ul><img src="https://example.com/grammar.png" alt="Example" width="320" height="180">'
+  const saved=await saveGrammarEntry({...entryRow(folder),contentHtml:html},db)
+  const root=document.createElement('div');root.innerHTML=saved.contentHtml
+  assert.equal(root.querySelector('p').style.textAlign,'center')
+  assert.equal(root.querySelector('p').style.marginLeft,'4em')
+  assert.equal(root.querySelector('p').style.lineHeight,'1.5')
+  assert.equal(root.querySelector('span').style.fontFamily,'Georgia')
+  assert.equal(root.querySelector('span').style.fontSize,'24px')
+  assert.equal(root.querySelector('span').style.color,'rgb(220, 38, 38)')
+  assert.equal(root.querySelector('mark').getAttribute('data-color'),'#fef08a')
+  assert.equal(root.querySelector('li').getAttribute('data-checked'),'true')
+  assert.equal(root.querySelector('input').checked,true)
+  assert.equal(root.querySelector('input').disabled,true)
+  assert.equal(root.querySelector('img').getAttribute('width'),'320')
+  const wire=encodeRow('grammarEntries',saved)
+  assert.equal(decodeRow('grammarEntries',{id:saved.id,owner_id:saved.ownerId,folder_id:saved.folderId,...wire}).contentHtml,saved.contentHtml)
+  const image=await saveGrammarEntry({...entryRow(folder),structure:'',contentHtml:'<img src="data:image/png;base64,aGVsbG8=" alt="An image">'},db)
+  assert.ok(image.contentHtml.includes('data:image/png;base64,'))
+ }finally{await db.delete()}
+})
+test('Rich HTML keeps formatting while removing executable images, controls and layout styles',()=>{
+ const safe=prepareGrammarHtml('<p style="color:red;position:fixed;inset:0;background-image:url(https://evil.test);font-size:18px">Text</p><mark data-color="red;position:fixed" style="background-color:yellow">mark</mark><img src="javascript:evil()" onerror="evil()"><img src="data:image/svg+xml;base64,PHN2Zz4="><input type="password"><label>Label</label><ul data-type="evil"><li data-checked="true">Plain item</li></ul>')
+ const root=document.createElement('div');root.innerHTML=safe
+ assert.equal(root.querySelector('p').style.color,'red')
+ assert.equal(root.querySelector('p').style.fontSize,'18px')
+ assert.equal(root.querySelector('p').style.position,'')
+ assert.equal(root.querySelector('p').style.backgroundImage,'')
+ assert.equal(root.querySelector('mark').hasAttribute('data-color'),false)
+ assert.equal(root.querySelectorAll('img,input').length,0)
+ assert.equal(root.querySelector('[data-type],[data-checked]'),null)
 })

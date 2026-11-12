@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL('../src/lib/'+p+'.ts',import.meta.url),'utf8'
 const url=s=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(s)).toString('base64')
 const dbUrl=url(read('db').replace("'dexie'",JSON.stringify(import.meta.resolve('dexie'))))
 const {VocabDatabase}=await import(dbUrl)
-const {saveShadowingFolder,saveShadowingLesson,lessonForRecording}=await import(url(read('shadowing-storage').replace("'./db'",JSON.stringify(dbUrl))))
+const {saveShadowingFolder,saveShadowingLesson,lessonForRecording,shadowingHtml,confirmShadowingMatches}=await import(url(read('shadowing-storage').replace("'./db'",JSON.stringify(dbUrl))))
 
 test('shadowing folders create, rename and prevent duplicate names and owner changes',async()=>{
  const db=new VocabDatabase('shadowing-'+crypto.randomUUID())
@@ -49,5 +49,28 @@ test('new lessons require an owned folder and legacy recordings remain addressab
   assert.equal(legacy.id,'old-recording')
   assert.equal(legacy.folderId,'')
   assert.equal(legacy.referenceText,'Hello')
+ }finally{await db.delete()}
+})
+
+test('editing lesson text clears detection and preserves original recording text; confirmations reject stale results',async()=>{
+ const db=new VocabDatabase('shadowing-'+crypto.randomUUID())
+ try{
+  const folder=await saveShadowingFolder('a','Work',undefined,db)
+  const lesson=await saveShadowingLesson({id:'lesson',ownerId:'a',folderId:folder.id,title:'Read',referenceText:'Hello world.',createdAt:'2026-01-01',updatedAt:'2026-01-01'},db)
+  const html=shadowingHtml(lesson.referenceText)
+  assert.equal(shadowingHtml('<script>& hello'),'<p>&lt;script&gt;&amp; hello</p>')
+  await db.notes.put({id:'note',kind:'basic',front:'world',back:'Meaning',createdAt:0})
+  await db.speakingRecordings.add({id:'take',lessonId:lesson.id,referenceText:lesson.referenceText})
+  const detection={html,matches:[],createdAt:'2026-01-02'}
+  const detected=await saveShadowingLesson({...lesson,detection},db)
+  const moved=await saveShadowingLesson({...detected,title:'Renamed'},db)
+  assert.deepEqual(moved.detection,detection)
+  const confirmed=await confirmShadowingMatches(lesson.id,'a',detection,[{start:7,end:12,noteId:'note',word:'world'}],db)
+  assert.equal(confirmed.detection.matches[0].confirmed,true)
+  await assert.rejects(()=>confirmShadowingMatches(lesson.id,'a',detection,[],db),/thay đổi/)
+  await assert.rejects(()=>confirmShadowingMatches(lesson.id,'b',confirmed.detection,[],db),/quyền/)
+  const edited=await saveShadowingLesson({...confirmed,referenceText:'A new passage.'},db)
+  assert.equal(edited.detection,undefined)
+  assert.equal((await db.speakingRecordings.get('take')).referenceText,'Hello world.')
  }finally{await db.delete()}
 })

@@ -263,3 +263,24 @@ test('Saved vocabulary has priority over references, phrases stay intact and ref
  const forged={...result,matches:result.matches.map(match=>({...match,noteId:'irregular:fake'}))}
  assert.equal(root(renderReadingHtml(html,forged,new Set())).querySelectorAll('[data-reading-note]').length,0)
 })
+
+test('Grouped irregular verb cards detect the base forms in a shadowing passage and their past forms',async()=>{
+ const notes=[note('drive','drive – drove – driven'),note('come','come - came - come'),note('buy','buy/bought/bought'),note('sell','sell – sold – sold')]
+ const html='<p>The drive is worth the effort. People come to buy and sell. They drove, came, bought and sold.</p>'
+ const result=await detectReadingVocab(html,notes)
+ assert.deepEqual(result.matches.map(match=>match.noteId),['drive','come','buy','sell','drive','come','buy','sell'])
+ const rendered=root(renderReadingHtml(html,result,new Set(notes.map(row=>row.id))))
+ assert.equal(rendered.textContent,root(html).textContent)
+ assert.equal(rendered.querySelectorAll('a[data-reading-note]').length,8)
+ const variants=await detectReadingVocab('<p>selling buys driving</p>',notes)
+ for(const [word,id] of [['selling','sell'],['buys','buy'],['driving','drive']])assert.ok(variants.suggestions.find(row=>row.word===word)?.candidates.some(candidate=>candidate.noteId===id))
+})
+test('Detect does not split ordinary hyphenated cards and still links built-in verb references',async()=>{
+ const result=await detectReadingVocab('<p>mother in law come buy sell</p>',[note('family','mother-in-law')])
+ assert.deepEqual(result.matches.map(match=>match.noteId),['irregular:come','irregular:buy','irregular:sell'])
+ assert.equal(result.matches.some(match=>match.noteId==='family'),false)
+ assert.equal(result.suggestions.length,0)
+ const sell=await detectReadingVocab('<p>sold</p>',[note('sell','sell')])
+ assert.equal(sell.matches[0].noteId,'irregular:sell')
+ assert.equal(sell.suggestions.length,0)
+})

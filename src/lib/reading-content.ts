@@ -1,7 +1,7 @@
 import { grammarHighlightRanges } from './reading-grammar'
 import { irregularVerbs, irregularVerbForms, irregularVerbId, findIrregularVerb, isIrregularVerbForm } from './irregular-verbs'
 import type { GrammarEntry } from './grammar-types'
-import { createReadingSimilarity, type ReadingSuggestion } from './reading-similarity'
+import { createReadingSimilarity, readingSearchWords, type ReadingSuggestion } from './reading-similarity'
 ﻿import DOMPurify from 'dompurify'
 import { noteWord } from './related-words'
 import type { Note } from './cards'
@@ -32,8 +32,8 @@ const escape=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
 export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortSignal,previous?:{html:string;matches:ReadingMatch[]}){
  const clean=cleanReadingHtml(html),{text}=readingDocument(clean)
  const groups=new Map<string,{word:string;noteId:string;pattern:RegExp}[]>(),seen=new Set<string>()
- for(const note of [...notes].sort((a,b)=>a.id.localeCompare(b.id))){
-  const word=noteWord(note).trim().replace(/\s+/gu,' '),key=word.toLowerCase()
+ for(const note of [...notes].sort((a,b)=>a.id.localeCompare(b.id)))for(const word of readingSearchWords(noteWord(note))){
+  const key=word.toLowerCase()
   if(!word||word.length>200||!/[\p{L}]/u.test(word)||/[<>\r\n]/u.test(word)||seen.has(key))continue
   seen.add(key);const first=key[0];const rows=groups.get(first)??[]
   rows.push({word,noteId:note.id,pattern:new RegExp(escape(word).replace(/ /g,'[^\\S\\r\\n]+'),'iyu')});groups.set(first,rows)
@@ -64,7 +64,7 @@ export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortS
   if(match.confirmed&&validIds.has(match.noteId)&&!matches.some(exact=>match.start<exact.end&&match.end>exact.start))matches.push(match)
  }
  matches.sort((a,b)=>a.start-b.start)
- const similar=createReadingSimilarity(notes.filter(note=>seen.has(noteWord(note).trim().replace(/\s+/gu,' ').toLowerCase())).map(note=>({noteId:note.id,word:noteWord(note).trim(),meaning:(note.values?.['Nghĩa tiếng Việt']||note.back||'').slice(0,400)})))
+ const similar=createReadingSimilarity(notes.flatMap(note=>readingSearchWords(noteWord(note)).filter(word=>seen.has(word.toLowerCase())).map(word=>({noteId:note.id,word,meaning:(note.values?.['Nghĩa tiếng Việt']||note.back||'').slice(0,400)}))))
  const suggestions=new Map<string,ReadingSuggestion>(),cache=new Map<string,ReturnType<typeof similar>>()
  let cursor=0,index=0
  for(const token of text.matchAll(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)){

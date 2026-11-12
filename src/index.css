@@ -57,6 +57,7 @@ button, a, input, select, textarea { outline-offset: 4px; }
 .reading-content p, .reading-content ul, .reading-content ol, .reading-content blockquote, .reading-content table, .reading-content pre { margin: 0 0 1.1em; }
 .reading-content h1, .reading-content h2, .reading-content h3, .reading-content h4 { font-weight: 650; line-height: 1.4; margin: 1.2em 0 .6em; color: #172c28; }
 .reading-content h1 { font-size: 1.8rem; } .reading-content h2 { font-size: 1.5rem; } .reading-content h3 { font-size: 1.2rem; }
+.reading-content ol { list-style: decimal; padding-left: 1.5em; }
 .reading-content ul { list-style: disc; padding-left: 1.5em; } .reading-content ol { list-style: decimal; padding-left: 1.5em; }
 .reading-content blockquote { border-left: 3px solid #a7f3d0; padding-left: 1em; color: #64748b; }
 .reading-content table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
@@ -260,3 +261,69 @@ input.grammar-assignment-radio {
 }
 .reading-content a.reading-grammar-link:hover { text-decoration-color: #a16207; text-decoration-thickness: 2px; }
 .reading-content a.reading-grammar-link:focus-visible { outline: 2px solid #ca8a04; outline-offset: 3px; border-radius: 2px; }
+
+/* Keep editable grammar documents readable inside the dialog's scroll region. */
+.grammar-text-editor { white-space: pre-wrap; }
+.grammar-text-editor > :first-child { margin-top: 0; }
+.grammar-text-editor > :last-child { margin-bottom: 0; }
+.grammar-text-editor ol { list-style: decimal; padding-left: 1.5em; }
+.grammar-text-editor ul { list-style: disc; padding-left: 1.5em; }
+.grammar-text-editor li p { margin: 0; }
+.grammar-text-editor table { width: 100%; table-layout: fixed; display: table; }
+.grammar-text-editor td, .grammar-text-editor th { position: relative; min-width: 60px; vertical-align: top; }
+.grammar-text-editor th { font-weight: 600; background: #f1f5f9; }
+.grammar-text-editor .selectedCell { background: #d1fae5; }
+.grammar-text-editor code { border-radius: .25rem; background: #f1f5f9; padding: .1em .3em; }
+
+/* Shared rich grammar styles apply in the editor, preview and saved content. */
+.grammar-rich-content { white-space: pre-wrap; }
+.grammar-rich-content h5, .grammar-rich-content h6 { font-weight: 650; margin: 1em 0 .6em; }
+.grammar-rich-content img { display: block; max-width: 100%; height: auto; margin: 1em 0; border-radius: .5rem; }
+.grammar-rich-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.grammar-rich-content li[data-type="taskItem"] { display: flex; align-items: flex-start; gap: .65rem; margin: .35rem 0; }
+.grammar-rich-content li[data-type="taskItem"] > label { flex: 0 0 auto; margin: .35em 0 0; padding: 0; }
+.grammar-rich-content li[data-type="taskItem"] > label input { width: 1rem; height: 1rem; padding: 0; accent-color: #047857; cursor: pointer; }
+.grammar-rich-content li[data-type="taskItem"] > label input:disabled { opacity: 1; cursor: default; }
+.grammar-rich-content li[data-type="taskItem"] > div { min-width: 0; flex: 1; }
+.grammar-rich-content li[data-type="taskItem"] p { margin: 0; }
+.grammar-rich-content li[data-checked="true"] > div { text-decoration: line-through; color: #64748b; }
+.grammar-rich-content hr { border: 0; border-top: 1px solid #cbd5e1; margin: 1.5rem 0; }
+.grammar-text-editor .tableWrapper { overflow-x: auto; }
+.grammar-text-editor .column-resize-handle { position: absolute; top: 0; right: -2px; bottom: 0; width: 4px; background: #10b981; pointer-events: none; }
+.grammar-text-editor.resize-cursor { cursor: col-resize; }
+.grammar-editor-expanded .grammar-text-editor { min-height: 100%; }
+[data-slot="dialog-content"]:has(.grammar-editor-expanded) { width: calc(100vw - 2rem); max-width: 1400px; height: calc(100dvh - 2rem); max-height: calc(100dvh - 2rem); }
+
+.grammar-text-editor [data-resize-container] { max-width: 100%; width: fit-content; margin: 1em 0; }
+.grammar-text-editor [data-resize-wrapper] { max-width: 100%; }
+.grammar-text-editor [data-resize-wrapper] img { margin: 0; }
+.grammar-text-editor [data-resize-handle] { width: 10px; height: 10px; border: 2px solid white; border-radius: 2px; background: #059669; opacity: 0; }
+.grammar-text-editor [data-resize-container]:hover [data-resize-handle], .grammar-text-editor .ProseMirror-selectednode [data-resize-handle] { opacity: 1; }
+.grammar-text-editor [data-resize-handle="top-left"], .grammar-text-editor [data-resize-handle="bottom-right"] { cursor: nwse-resize; }
+.grammar-text-editor [data-resize-handle="top-right"], .grammar-text-editor [data-resize-handle="bottom-left"] { cursor: nesw-resize; }
+
+/* Grammar dialogs keep metadata, formatting tools and save actions stationary. */
+.grammar-editor-content { scrollbar-gutter: stable; }
+.grammar-editor-content > .grammar-text-editor { min-height: 100%; }
+.grammar-fields > .grammar-import-tools { overflow: visible; }
+.grammar-prompt-popover, .grammar-import-popover, .grammar-reading-setup-popover {
+ position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 40;
+ width: min(48rem, calc(100% - 2rem)); max-height: min(70dvh, calc(100% - 2rem)); overflow-y: auto; overscroll-behavior: contain;
+ padding: 1rem; border: 1px solid #cbd5e1; border-radius: .75rem; background: white; box-shadow: 0 16px 48px #0f172a33;
+}
+.grammar-prompt-popover textarea, .grammar-import-popover textarea { max-height: 35dvh; resize: none; }
+.grammar-editor-inline-panel { position: absolute; top: .5rem; left: .5rem; right: .5rem; z-index: 30; max-height: calc(100% - 1rem); overflow-y: auto; border: 1px solid #cbd5e1; border-radius: .75rem; box-shadow: 0 8px 24px #0f172a26; }
+
+.grammar-format-options { display: none; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.grammar-format-options-open:not([hidden]) { display: flex; }
+.grammar-format-options > div { display: contents; }
+.grammar-format-options > div > * { flex-shrink: 0; }
+.grammar-toolbar-toggle { display: inline-flex; }
+@media (max-width: 639px), (max-height: 700px) {
+ .grammar-toolbar-toggle { display: inline-flex; }
+ .grammar-format-options { display: none; }
+ .grammar-format-options-open { display: flex; position: absolute; top: calc(100% + .25rem); left: 0; right: 0; z-index: 30; max-height: 40dvh; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: .75rem; background: #f8fafc; padding: .5rem; box-shadow: 0 8px 24px #0f172a26; }
+}
+@media (max-height: 700px) {
+ .grammar-dialog [data-slot="dialog-description"] { display: none; }
+}

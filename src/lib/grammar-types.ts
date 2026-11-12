@@ -8,6 +8,7 @@ export interface GrammarDocument {
  notes:string
 }
 export interface GrammarEntry {
+ contentHtml?:string
  sortOrder?:number
  name?:string
  category?:string

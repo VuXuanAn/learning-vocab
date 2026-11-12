@@ -1,7 +1,9 @@
+import { cleanGrammarHtml } from './grammar-html'
 import { grammarDocument } from './grammar-document'
 import type { GrammarEntry } from './grammar-types'
 
 export default function GrammarContent({entry}:{entry:GrammarEntry}) {
+ if(entry.contentHtml!==undefined)return <div className="grammar-rich-content reading-content break-words" dangerouslySetInnerHTML={{__html:cleanGrammarHtml(entry.contentHtml)}}/>
  const document=grammarDocument(entry)
  return <div className="space-y-6">
   {document.level&&<span className="inline-block rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">{document.level}</span>}

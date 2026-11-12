@@ -287,3 +287,30 @@ Trong AI generator, Điền từ cache ghép các mục vào danh sách đang nh
 Nút chat ở góc dưới bên phải mở một khung trò chuyện với Gemini, dùng model/key backend hiện tại. Tin nhắn chỉ giữ trong React state theo phiên đăng nhập: đóng/mở khung hoặc chuyển trang vẫn giữ, tải lại trang/đăng xuất/đổi tài khoản sẽ xóa. Không lưu lịch sử vào Supabase, IndexedDB, localStorage hoặc file máy chủ. Backend `/api/ai/chat` nhận ngữ cảnh gần đây cho từng request rồi trả câu trả lời; thống kê usage chỉ ghi model/số token/số lượt như các tính năng AI khác, không ghi nội dung chat. Nội dung gửi vẫn được Gemini xử lý theo chính sách dịch vụ của nhà cung cấp.
 
 Client gửi tối đa 19 tin nhắn gần đây, tổng tối đa 10.000 ký tự; mỗi tin nhắn trong request tối đa 3.000 ký tự. Hỗ trợ Enter để gửi, Shift+Enter xuống dòng, dừng chờ phản hồi và xóa cuộc trò chuyện trên máy. Không có công cụ truy cập/sửa dữ liệu ứng dụng từ chat. Không cần migration hoặc biến môi trường mới; khởi động lại/deploy backend để có endpoint mới.
+
+
+### Luyện shadowing trong trang bài học
+
+Mở bài từ danh sách Speaking để nghe mẫu, ghi âm hoặc tải audio, xem các lần ghi âm và AI review ngay trên trang bài học. Nút Chỉnh sửa cập nhật tên, thư mục và đoạn văn; bản ghi cũ giữ nguyên đoạn văn lúc ghi. Thêm bài học mở biểu mẫu rồi chuyển vào bài vừa lưu. Menu luyện riêng đã bỏ; `/speaking/practice` chuyển về danh sách.
+
+Chạy `supabase/migrations/013_shadowing_detection.sql` để đồng bộ kết quả Detect vocab. Detect dùng chung bộ dò của Reading, liên kết thẻ trong nội dung và cho xác nhận từ gần giống. Sửa đoạn văn sẽ xóa kết quả dò cũ; bấm Detect vocab để dò lại.
+
+
+### Nội dung ngữ pháp tự do
+
+Form thêm/sửa Grammar dùng tên và một ô nhập HTML hoặc văn bản, kèm tab Xem trước. Có thể tự bố trí tiêu đề, danh sách, bảng, ví dụ và ghi chú. Khi sửa mục cũ, công thức, cách dùng, ví dụ và ghi chú được đưa vào nội dung chung. HTML được làm sạch khi lưu và hiển thị. Nội dung lưu trong `grammar_entries.data` qua cơ chế đồng bộ hiện tại, không cần migration mới. Form thêm từ Reading dùng cùng trình nhập và giữ các vùng tô sáng/liên kết bài đọc. Import JSON cũ vẫn có trong mục thu gọn “Nhập từ JSON”.
+
+
+Form Grammar mặc định mở chế độ **Soạn thảo** với trình soạn Tiptap: tiêu đề, in đậm/nghiêng/gạch chân, danh sách, trích dẫn, liên kết, bảng và hoàn tác/làm lại. Các tab HTML và Xem trước dùng cùng nội dung. Chọn ô trong bảng để thêm/xóa hàng, cột hoặc bảng. Nội dung vẫn lưu và đồng bộ bằng HTML như trước.
+
+
+Thanh công cụ ngữ pháp mở rộng có font/cỡ chữ, màu chữ, tô nền, căn lề, giãn dòng, thụt lề, checklist, chỉ số trên/dưới, khối mã, đường phân cách và ảnh URL hoặc ảnh từ máy (tối đa 750 KB mỗi ảnh). Bảng chọn được số hàng/cột, thêm/xóa hàng/cột, gộp/tách ô và bật hàng/cột tiêu đề; kéo để đổi độ rộng cột. Góc ảnh có tay kéo đổi kích thước. Nút mở rộng tăng diện tích form. Định dạng được giữ trong HTML khi lưu và đồng bộ; không cần migration mới.
+
+
+Popup thêm/sửa Grammar và thêm từ Reading mở rộng tới 1152px (co lại theo màn hình). Các chế độ soạn chỉ còn Soạn thảo và Xem trước. Mục “Prompt AI và import ngữ pháp” có prompt để sao chép, mô tả các định dạng Tiptap hỗ trợ và yêu cầu JSON `{ "name": "…", "contentHtml": "…" }`. Import điền tên và nội dung vào editor để sửa tiếp, giữ nguyên thư mục và liên kết bài đọc; định dạng JSON cấu trúc cũ vẫn import được.
+
+
+Nút **Tạo bằng AI** cạnh Import JSON trong form Grammar gửi tiêu đề và prompt hiện tại tới `POST /api/ai/generate-grammar`, dùng Gemini đã cấu hình trên backend. AI tạo theo các định dạng Tiptap, ưu tiên bảng, không đánh số tiêu đề hoặc thêm mục ghi chú/bài tập. Kết quả được làm sạch rồi điền vào editor để review; chỉ lưu dữ liệu khi bấm Lưu ngữ pháp. Có trạng thái chờ, nút Dừng tạo, chặn lưu khi đang tạo và giữ nội dung cũ nếu hủy/lỗi. Endpoint dùng chung giới hạn request và thống kê token hiện tại. Không cần migration hoặc API key phía frontend.
+
+
+Popup Grammar cố định vùng tên/thư mục, các nút AI/import, thanh định dạng và nút lưu. Nội dung editor và Xem trước tự cuộn trong phần diện tích còn lại, không kéo cuộn cả form. Prompt/import và thiết lập tô vàng từ Reading mở thành bảng nổi. Ở màn hình hẹp hoặc cửa sổ thấp, nút “Công cụ định dạng” mở toàn bộ tùy chọn để dành chỗ cho nội dung.

@@ -1,3 +1,4 @@
+import { grammarGenerationSchema, generateGrammar } from './grammar-generation.mjs'
 import { translationSchema, translateReading } from './reading-translation.mjs'
 import { chatSchema, chatReply } from './chat.mjs'
 import { reviewAudioSchema, reviewSpeaking } from './speaking-review.mjs'
@@ -34,6 +35,13 @@ export function createApp({ client = null, model = DEFAULT_GEMINI_MODEL, fronten
     if(!parsed.success)return response.status(400).json({error:'Cần đoạn văn gốc và file audio hợp lệ, tối đa 10 MB.'})
     if(!client)return response.status(503).json({error:'Chưa cấu hình GEMINI_API_KEY trong server/.env.'})
     try{response.json(await reviewSpeaking(trackedClient,model,parsed.data))}
+    catch(error){if(error instanceof GenerationError)return response.status(error.status).json({error:error.message});const failure=providerError(error);response.status(failure.status).json({error:failure.error})}
+  })
+  app.post('/api/ai/generate-grammar', async (request,response)=>{
+    const parsed=grammarGenerationSchema.safeParse(request.body)
+    if(!parsed.success)return response.status(400).json({error:'Nhập tên ngữ pháp (tối đa 160 ký tự) và prompt hợp lệ.'})
+    if(!client)return response.status(503).json({error:'Chưa cấu hình GEMINI_API_KEY trên backend.'})
+    try{response.json(await generateGrammar(trackedClient,model,parsed.data))}
     catch(error){if(error instanceof GenerationError)return response.status(error.status).json({error:error.message});const failure=providerError(error);response.status(failure.status).json({error:failure.error})}
   })
   app.post('/api/ai/translate-reading', async (request,response)=>{

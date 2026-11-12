@@ -1,3 +1,4 @@
+import { prepareGrammarHtml, grammarHtmlText, grammarHtmlLimit } from './grammar-html'
 import { z } from 'zod'
 import { db, type VocabDatabase } from './db'
 import type { GrammarEntry, GrammarFolder } from './grammar-types'
@@ -7,6 +8,7 @@ const sourceSchema=z.object({exactSelection:z.boolean().optional(),articleId:z.s
 const schema=z.object({source:sourceSchema.optional(),sources:z.array(sourceSchema).max(1000).optional(),id:z.string().uuid(),ownerId:z.string().min(1),folderId:z.string().uuid(),title:z.string().trim().min(1).max(160),topic:z.string().trim().max(100),structure:z.string().trim().min(1).max(5000),usage:z.string().trim().max(20000),example:z.string().trim().max(10000),translation:z.string().trim().max(10000),notes:z.string().trim().max(20000),createdAt:z.string(),updatedAt:z.string()})
 export async function saveGrammarEntry(row:GrammarEntry,account:VocabDatabase=db){
  const structuredSchema=schema.extend({
+  contentHtml:z.string().max(grammarHtmlLimit).optional(),
   sortOrder:z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
   structure:z.string().trim().min(1).max(153030),usage:z.string().trim().max(1000050),example:z.string().trim().max(500050),translation:z.string().trim().max(500050),
   name:z.string().trim().min(1).max(160).optional(),category:z.string().trim().max(100).optional(),level:z.enum(['','A1','A2','B1','B2','C1','C2']).optional(),
@@ -14,7 +16,15 @@ export async function saveGrammarEntry(row:GrammarEntry,account:VocabDatabase=db
   usages:z.array(z.object({id:z.number().int().positive(),content:z.string().trim().min(1).max(20000)})).max(50).optional(),
   examples:z.array(z.object({id:z.number().int().positive(),en:z.string().trim().min(1,'Nhập câu ví dụ tiếng Anh.').max(10000),vi:z.string().trim().max(10000)})).max(50).optional(),
  })
- const prepared=row.structures||row.usages||row.examples?cleanGrammarDocument(row):row
+ let prepared=row
+ if(row.contentHtml!==undefined){
+  if(row.contentHtml.length>grammarHtmlLimit)throw new Error('Nội dung ngữ pháp quá dài.')
+  const contentHtml=prepareGrammarHtml(row.contentHtml)
+  const text=grammarHtmlText(contentHtml)
+  if(!text&&!/<img\s/i.test(contentHtml))throw new Error('Nhập nội dung ngữ pháp.')
+  const compatible=row.structures||row.usages||row.examples?cleanGrammarDocument(row):row
+  prepared={...compatible,title:row.title,contentHtml,name:row.title,structure:row.structure.trim()||row.title,usage:text.slice(0,1000050)}
+ }else if(row.structures||row.usages||row.examples)prepared=cleanGrammarDocument(row)
  const result=structuredSchema.safeParse({...prepared,updatedAt:new Date().toISOString()})
  if(!result.success)throw new Error(result.error.issues.map(issue=>issue.message).join(' '))
  const parsed=result.data

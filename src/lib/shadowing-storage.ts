@@ -1,4 +1,5 @@
-﻿import { db, type VocabDatabase } from './db'
+import type { ReadingMatch } from './reading-types'
+import { db, type VocabDatabase } from './db'
 import type { ShadowingFolder, ShadowingLesson } from './shadowing-types'
 export async function saveShadowingFolder(ownerId:string,name:string,id?:string,account:VocabDatabase=db){
  const clean=name.trim();if(!ownerId||!clean||clean.length>100)throw new Error('Tên thư mục cần từ 1 đến 100 ký tự.')
@@ -19,9 +20,25 @@ export async function saveShadowingLesson(row:ShadowingLesson,account:VocabDatab
   const previous=await account.shadowingLessons.get(row.id)
   if(previous&&previous.ownerId!==row.ownerId)throw new Error('Không có quyền sửa bài.')
   const next={...row,title:row.title.trim(),referenceText:row.referenceText.trim(),updatedAt:new Date().toISOString(),metadataSynced:false}
+  if(previous?.referenceText!==next.referenceText)next.detection=undefined
   await account.shadowingLessons.put(next);return next
  })
 }
 export function lessonForRecording(row:{id:string;lessonId?:string;title:string;referenceText:string;createdAt:string},lessons:ShadowingLesson[],ownerId:string):ShadowingLesson{
  return lessons.find(lesson=>lesson.id===(row.lessonId??row.id))??{id:row.lessonId??row.id,ownerId,folderId:'',title:row.title,referenceText:row.referenceText,createdAt:row.createdAt,updatedAt:row.createdAt}
+}
+
+// Encode plain lesson text before using the shared Reading detector and renderer.
+export function shadowingHtml(text:string){return '<p>'+text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>'}
+export async function confirmShadowingMatches(id:string,ownerId:string,base:NonNullable<ShadowingLesson['detection']>,confirmed:ReadingMatch[],account:VocabDatabase=db){
+ return account.transaction('rw',account.shadowingFolders,account.shadowingLessons,account.speakingRecordings,account.notes,async()=>{
+  const current=await account.shadowingLessons.get(id)
+  if(!current||current.ownerId!==ownerId)throw new Error('Không có quyền lưu kết quả vào bài học này.')
+  if(!current.detection||JSON.stringify(current.detection)!==JSON.stringify(base))throw new Error('Kết quả dò đã thay đổi. Hãy Detect vocab lại.')
+  const notes=await account.notes.bulkGet([...new Set(confirmed.map(match=>match.noteId))])
+  if(notes.some(note=>!note))throw new Error('Một thẻ đã bị xóa. Hãy dò lại.')
+  const matches=[...base.matches,...confirmed.map(match=>({...match,confirmed:true}))].sort((a,b)=>a.start-b.start)
+  if(matches.some((match,index)=>match.start<0||match.end<=match.start||index>0&&matches[index-1].end>match.start))throw new Error('Các vị trí bị chồng lấn. Hãy dò lại.')
+  return saveShadowingLesson({...current,detection:{...base,matches,createdAt:new Date().toISOString()}},account)
+ })
 }

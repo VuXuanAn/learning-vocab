@@ -32,3 +32,17 @@ export const grammarJsonTemplate:GrammarDocument={
  examples:[{id:1,en:'I study English every day.',vi:'Tôi học tiếng Anh mỗi ngày.'},{id:2,en:"She doesn't drink coffee.",vi:'Cô ấy không uống cà phê.'}],
  notes:'He/She/It + V(s/es). Sau do/does, dùng động từ nguyên mẫu.',
 }
+
+
+// Rich imports share the same envelope as the AI prompt. Keep the old schema for existing JSON files.
+export function parseGrammarImport(text:string):GrammarDocument|{name:string;contentHtml:string}{
+ if(text.length>1500000)throw new Error('JSON quá lớn (tối đa 1,5 MB ký tự).')
+ let value:unknown
+ try{value=JSON.parse(text.replace(/^\uFEFF/,''))}catch{throw new Error('JSON không hợp lệ. Kiểm tra dấu ngoặc, dấu phẩy và dấu nháy kép.')}
+ if(value&&typeof value==='object'&&Object.hasOwn(value,'contentHtml')){
+  const result=z.object({name:z.string().trim().min(1).max(160),contentHtml:z.string().trim().min(1).max(1500000)}).safeParse(value)
+  if(!result.success)throw new Error('JSON cần name (1–160 ký tự) và contentHtml chứa nội dung. Sao chép prompt để xem định dạng.')
+  return result.data
+ }
+ return parseGrammarJson(text)
+}
