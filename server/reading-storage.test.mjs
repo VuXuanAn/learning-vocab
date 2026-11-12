@@ -10,7 +10,7 @@ const dbUrl=url(read('db').replace("'dexie'",JSON.stringify(import.meta.resolve(
 const {VocabDatabase}=await import(dbUrl)
 const sourceUrl=url(read('reading-sources').replace("'zod'",JSON.stringify(import.meta.resolve('zod'))))
 const {readingSources}=await import(sourceUrl)
-const {saveReadingArticle,saveReadingFolder,saveReadingStudyNote}=await import(url(read('reading-storage').replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod'))).replace("'./reading-sources'",JSON.stringify(sourceUrl))))
+const {saveReadingArticle,saveReadingFolder,saveReadingStudyNote,saveReadingTranslation,editReadingTranslation,confirmReadingMatches}=await import(url(read('reading-storage').replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod'))).replace("'./reading-sources'",JSON.stringify(sourceUrl))))
 test('Reading storage requires owned folder, preserves note and clears detected links only when content changes',async()=>{
  const db=new VocabDatabase('reading-test-'+crypto.randomUUID()),now=new Date().toISOString()
  try{
@@ -129,5 +129,67 @@ test('Detection never edits read-only vocabulary',async()=>{
   const article=await saveReadingArticle({id:crypto.randomUUID(),ownerId:'owner',folderId:folder.id,title:'Read',contentHtml:'word',note:'',createdAt:now,updatedAt:now},db)
   await saveReadingArticle({...article,detection:{html:'word',createdAt:now,matches:[{start:0,end:4,noteId:id,word:'word'}]}},db)
   assert.equal(readingSources(await db.notes.get(id)).length,0)
+ }finally{await db.delete()}
+})
+
+test('Translation persists with article JSON, preserves concurrent detection and rejects stale source or ownership',async()=>{
+ const db=new VocabDatabase('reading-translation-'+crypto.randomUUID()),now=new Date().toISOString()
+ try{
+  const folder=await saveReadingFolder({id:crypto.randomUUID(),ownerId:'owner',name:'Translation',createdAt:now,updatedAt:now},db)
+  const article=await saveReadingArticle({id:crypto.randomUUID(),ownerId:'owner',folderId:folder.id,title:'Read',contentHtml:'<p>Hello</p>',note:'',createdAt:now,updatedAt:now},db)
+  const detection={html:article.contentHtml,matches:[],createdAt:now}
+  await saveReadingArticle({...article,detection},db)
+  const saved=await saveReadingTranslation(article.id,'owner',article.contentHtml,'Xin chào',db)
+  assert.equal(saved.translation.text,'Xin chào');assert.deepEqual(saved.detection,detection);assert.equal(saved.metadataSynced,false)
+  assert.equal((await db.readingArticles.get(article.id)).translation.text,'Xin chào')
+  await assert.rejects(()=>saveReadingTranslation(article.id,'other',article.contentHtml,'Sai',db))
+  const renamed=await saveReadingArticle({...saved,title:'Renamed'},db)
+  assert.equal(renamed.translation.text,'Xin chào')
+  const edited=await saveReadingArticle({...renamed,contentHtml:'<p>Changed</p>'},db)
+  assert.equal(edited.translation,undefined)
+  await assert.rejects(()=>saveReadingTranslation(article.id,'owner',article.contentHtml,'Cũ',db))
+  await saveReadingArticle({...edited,deletedAt:now},db)
+  await assert.rejects(()=>saveReadingTranslation(article.id,'owner',edited.contentHtml,'Mới',db))
+ }finally{await db.delete()}
+})
+
+test('Manual translation edits preserve line breaks and reject overwriting newer translations',async()=>{
+ const db=new VocabDatabase('reading-edit-translation-'+crypto.randomUUID()),now=new Date().toISOString()
+ try{
+  const folder=await saveReadingFolder({id:crypto.randomUUID(),ownerId:'owner',name:'Edit',createdAt:now,updatedAt:now},db)
+  const article=await saveReadingArticle({id:crypto.randomUUID(),ownerId:'owner',folderId:folder.id,title:'Read',contentHtml:'<p>Hello</p>',note:'',createdAt:now,updatedAt:now},db)
+  const translated=await saveReadingTranslation(article.id,'owner',article.contentHtml,'Bản dịch AI',db)
+  const text='Đoạn đầu đã sửa.\nXuống dòng.\n\nĐoạn mới.'
+  const edited=await editReadingTranslation(translated,text,db)
+  assert.equal(edited.translation.text,text)
+  assert.equal((await db.readingArticles.get(article.id)).translation.text,text)
+  assert.equal(edited.metadataSynced,false)
+  await assert.rejects(()=>editReadingTranslation(translated,'Ghi đè cũ',db),/Bản dịch đã thay đổi/)
+  await assert.rejects(()=>editReadingTranslation(edited,'   ',db))
+  assert.equal((await db.readingArticles.get(article.id)).translation.text,text)
+  await saveReadingArticle({...edited,contentHtml:'<p>Changed</p>'},db)
+  await assert.rejects(()=>editReadingTranslation(edited,'Nội dung cũ',db),/Nội dung bài đã thay đổi/)
+ }finally{await db.delete()}
+})
+
+test('Confirmed near matches persist, update backlinks and reject stale scans or missing cards',async()=>{
+ const db=new VocabDatabase('reading-confirm-'+crypto.randomUUID()),now=new Date().toISOString()
+ try{
+  const folder=await saveReadingFolder({id:crypto.randomUUID(),ownerId:'owner',name:'Confirm',createdAt:now,updatedAt:now},db)
+  const noteId=crypto.randomUUID()
+  await db.notes.put({id:noteId,kind:'basic',front:'pinpoint',back:'xác định',extra:'',tags:'',createdAt:0})
+  const article=await saveReadingArticle({id:crypto.randomUUID(),ownerId:'owner',folderId:folder.id,title:'Near match',contentHtml:'pinpointing',note:'',createdAt:now,updatedAt:now},db)
+  const scanned=await saveReadingArticle({...article,detection:{html:article.contentHtml,matches:[],createdAt:now}},db)
+  const confirmed=[{start:0,end:11,noteId,word:'pinpoint',context:'pinpointing'}]
+  await assert.rejects(()=>confirmReadingMatches(article.id,'other',scanned.detection,confirmed,db))
+  await assert.rejects(()=>confirmReadingMatches(article.id,'owner',scanned.detection,[{...confirmed[0],noteId:'missing'}],db))
+  const saved=await confirmReadingMatches(article.id,'owner',scanned.detection,confirmed,db)
+  assert.equal(saved.detection.matches[0].confirmed,true)
+  assert.equal(saved.detection.matches[0].word,'pinpoint')
+  assert.equal(saved.metadataSynced,false)
+  assert.equal(readingSources(await db.notes.get(noteId))[0].articleId,article.id)
+  await assert.rejects(()=>confirmReadingMatches(article.id,'owner',scanned.detection,confirmed,db),/Kết quả dò đã thay đổi/)
+  await saveReadingArticle({...saved,contentHtml:'Edited'},db)
+  await assert.rejects(()=>confirmReadingMatches(article.id,'owner',saved.detection,confirmed,db))
  }finally{await db.delete()}
 })

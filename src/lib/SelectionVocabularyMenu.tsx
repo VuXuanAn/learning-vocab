@@ -1,12 +1,12 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
-import { Plus, Volume2, ListPlus } from 'lucide-react'
+import { Plus, Volume2, ListPlus, Highlighter, Link2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { addCachedWord } from './vocabulary-cache'
 import { useAddVocabulary } from './AddVocabularyDialog'
 
-interface SelectionMenu { text:string; left:number; top:number }
+interface SelectionMenu { text:string; left:number; top:number; grammar?:{articleId:string;range:Range} }
 const excluded='input,textarea,select,button,[contenteditable="true"],[role="textbox"],[role="dialog"],[data-app-sidebar],header,[data-selection-menu]'
 export default function SelectionVocabularyMenu(){
  const addVocabulary=useAddVocabulary()
@@ -24,14 +24,16 @@ export default function SelectionVocabularyMenu(){
    const start=element(range.startContainer),end=element(range.endContainer)
    if(!start?.closest('main')||!end?.closest('main')||start.closest(excluded)||end.closest(excluded)){setMenu(null);return}
    const text=selection.toString().trim().replace(/\s+/gu,' ')
-   if(!text||text.length>200||!/[\p{L}\p{N}]/u.test(text)){setMenu(null);return}
+   const content=start.closest<HTMLElement>('[data-reading-article]')
+   const grammar=content&&content.contains(end)?{articleId:content.dataset.readingArticle!,range:range.cloneRange()}:undefined
+   if(!text||text.length>(grammar?10000:200)||!/[\p{L}\p{N}]/u.test(text)){setMenu(null);return}
    const rect=range.getBoundingClientRect()
    if(!rect.width&&!rect.height){setMenu(null);return}
-   const width=220,height=140,gap=8
+   const width=220,height=grammar?220:140,gap=8
    const left=Math.max(gap,Math.min(rect.left+rect.width/2-width/2,window.innerWidth-width-gap))
    const top=rect.bottom+gap+height<window.innerHeight?rect.bottom+gap:Math.max(gap,rect.top-height-gap)
    activation.current=false
-   setMenu({text,left,top})
+   setMenu({text,left,top,grammar})
   }
   function schedule(){clearTimeout(timer);timer=setTimeout(read,120)}
   function hide(){clearTimeout(timer);setMenu(null)}
@@ -44,12 +46,13 @@ export default function SelectionVocabularyMenu(){
   return()=>{clearTimeout(timer);document.removeEventListener('selectionchange',schedule);document.removeEventListener('pointerup',schedule);document.removeEventListener('keyup',keyboard);window.removeEventListener('scroll',hide,true);window.removeEventListener('resize',hide)}
  },[])
  useEffect(()=>setMenu(null),[location.key])
- function activate(action:'add'|'speak'|'cache'){
+ function activate(action:'add'|'speak'|'cache'|'grammar'|'assign-grammar'){
   if(!menu||activation.current)return
   activation.current=true
   // Capture and open before focus/selection changes can remove the floating button.
   const text=menu.text
-  if(action==='add')addVocabulary(undefined,text)
+  if((action==='grammar'||action==='assign-grammar')&&menu.grammar)window.dispatchEvent(new CustomEvent('reading:add-grammar',{detail:{...menu.grammar,mode:action==='assign-grammar'?'assign':'create'}}))
+  else if(action==='add')addVocabulary(undefined,text)
   else if(action==='cache')void addCachedWord(text).then(added=>toast[added?'success':'info'](added?'Đã thêm vào cache từ vựng.':'Từ này đã có trong cache.')).catch(error=>toast.error(error instanceof Error?error.message:'Không lưu được cache.'))
   else if('speechSynthesis' in window&&'SpeechSynthesisUtterance' in window){
    window.speechSynthesis.cancel()
@@ -62,6 +65,6 @@ export default function SelectionVocabularyMenu(){
  }
  if(!menu)return null
  const portal=document.fullscreenElement??document.body
- const actions=[{id:'add',label:'Thêm từ vựng',icon:Plus},{id:'speak',label:'Phát âm',icon:Volume2},{id:'cache',label:'Thêm vào cache',icon:ListPlus}] as const
- return createPortal(<div data-selection-menu role="group" aria-label={'Thao tác với: '+menu.text} style={{left:menu.left,top:menu.top,width:220,maxWidth:'calc(100vw - 16px)'}} className="fixed z-[80] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-xl shadow-slate-900/15">{actions.map(action=><button key={action.id} type="button" disabled={action.id==='speak'&&!('speechSynthesis' in window&&'SpeechSynthesisUtterance' in window)} className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium transition hover:bg-emerald-50 hover:text-emerald-800 focus-visible:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-600" onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();activate(action.id)}} onClick={event=>{event.preventDefault();event.stopPropagation();activate(action.id)}}><action.icon size={16} className="shrink-0 text-emerald-700"/>{action.label}</button>)}</div>,portal)
+ const actions=[{id:'assign-grammar',label:'Gán ngữ pháp',icon:Link2},{id:'grammar',label:'Thêm ngữ pháp',icon:Highlighter},{id:'add',label:'Thêm từ vựng',icon:Plus},{id:'speak',label:'Phát âm',icon:Volume2},{id:'cache',label:'Thêm vào cache',icon:ListPlus}] as const
+ return createPortal(<div data-selection-menu role="group" aria-label={'Thao tác với: '+menu.text} style={{left:menu.left,top:menu.top,width:220,maxWidth:'calc(100vw - 16px)'}} className="fixed z-[80] rounded-xl border border-slate-200 bg-white p-1.5 text-slate-700 shadow-xl shadow-slate-900/15">{actions.filter(action=>(action.id==='grammar'||action.id==='assign-grammar')?!!menu.grammar:menu.text.length<=200).map(action=><button key={action.id} type="button" disabled={action.id==='speak'&&!('speechSynthesis' in window&&'SpeechSynthesisUtterance' in window)} className="flex h-10 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm font-medium transition hover:bg-emerald-50 hover:text-emerald-800 focus-visible:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-600" onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();activate(action.id)}} onClick={event=>{event.preventDefault();event.stopPropagation();activate(action.id)}}><action.icon size={16} className="shrink-0 text-emerald-700"/>{action.label}</button>)}</div>,portal)
 }

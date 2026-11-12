@@ -1,3 +1,4 @@
+import type { GrammarEntry, GrammarFolder } from './grammar-types'
 import type { CachedVocabulary } from './vocabulary-cache'
 import type { ReadingFolder, ReadingArticle, ReadingStudyNote } from './reading-types'
 import type { ShadowingFolder, ShadowingLesson } from './shadowing-types'
@@ -11,6 +12,8 @@ import type { Note } from './cards'
 import type { SyncedRow } from './row-codec'
 
 export class VocabDatabase extends Dexie {
+  grammarFolders!: Table<GrammarFolder, string>
+  grammarEntries!: Table<GrammarEntry, string>
   vocabularyCache!: Table<CachedVocabulary, string>
   readingStudyNotes!: Table<ReadingStudyNote, string>
   readingFolders!: Table<ReadingFolder, string>
@@ -45,6 +48,29 @@ export class VocabDatabase extends Dexie {
       }
     })
     this.version(7).stores({ vocabularyCache: 'key, createdAt' })
+    this.version(8).stores({ grammarEntries: 'id, ownerId, topic, status, createdAt' })
+    this.version(9).stores({ grammarFolders: 'id, ownerId, nameKey, createdAt', grammarEntries: 'id, ownerId, folderId, topic, status, createdAt' }).upgrade(async tx=>{
+      const folders=new Map<string,string>(),now=new Date().toISOString()
+      for(const entry of await tx.table('grammarEntries').toArray()){
+        let folderId=folders.get(entry.ownerId)
+        if(!folderId){
+          folderId=crypto.randomUUID();folders.set(entry.ownerId,folderId)
+          await tx.table('grammarFolders').put({id:folderId,ownerId:entry.ownerId,name:'Ngữ pháp của tôi',nameKey:'ngữ pháp của tôi',createdAt:now,updatedAt:now})
+        }
+        await tx.table('grammarEntries').update(entry.id,{folderId})
+      }
+    })
+    this.version(10).stores({}).upgrade(async tx=>{
+      const sampleFolderIds=new Set<string>()
+      for(const entry of await tx.table('grammarEntries').toArray()){
+        if(entry.isExample===true){sampleFolderIds.add(entry.folderId);await tx.table('grammarEntries').delete(entry.id)}
+      }
+      for(const id of sampleFolderIds){
+        const folder=await tx.table('grammarFolders').get(id)
+        if(folder?.nameKey==='ngữ pháp của tôi'&&!await tx.table('grammarEntries').where('folderId').equals(id).count())await tx.table('grammarFolders').delete(id)
+      }
+      await tx.table('syncMeta').filter(row=>row.id.startsWith('grammar-examples-v1-')).delete()
+    })
   }
 }
 export let db = new VocabDatabase()
