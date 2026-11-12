@@ -11,11 +11,11 @@ export async function readLocalRows(db: VocabDatabase) {
     bases: await db.syncRows.toArray(),
   }))
 }
-export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, active = () => true, mode: RowSyncMode = 'merge') {
+export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, active = () => true, mode: RowSyncMode = 'merge', tables: readonly RowTable[] = rowTables) {
   const captured = await readLocalRows(db)
   const base = new Map(captured.bases.map(row => [row.key, row]))
-  const remote = {} as Record<RowTable, Map<string, WireRow>>
-  for (const table of rowTables) {
+  const remote = Object.fromEntries(rowTables.map(table => [table, new Map()])) as Record<RowTable, Map<string, WireRow>>
+  for (const table of tables) {
     remote[table] = remoteMap(table, await transport.load(table, captured.bases.filter(row => row.table === table)))
     if (!active()) return
   }
@@ -27,7 +27,8 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
   const aliveFolders = new Set([...remote.folders].filter(([, row]) => !row.deleted_at).map(([id]) => id))
   for (const [id] of captured.tables.folders) if (!base.has(key('folders', id))) aliveFolders.add(id)
   const pushed = new Set<string>()
-  for (const table of mode === 'download' ? [] : ['folders', 'templates', 'notes'] as const) {
+  for (const table of mode === 'download' ? [] : ['folders', 'templates', 'notes', 'grammarFolders', 'grammarEntries'] as const) {
+    if (!tables.includes(table)) continue
     const ids = new Set([...captured.tables[table].keys(), ...captured.bases.filter(row => row.table === table).map(row => row.id)])
     // Create/update parents before child folders, independent of IndexedDB key order.
     const ordered = [...ids]
@@ -69,7 +70,7 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
     }
   }
   const aliveNotes = new Set([...remote.notes].filter(([, row]) => !row.deleted_at && aliveFolders.has(row.folder_id)).map(([id]) => id))
-  for (const [id, row] of mode === 'download' ? [] : captured.tables.reviews) {
+  for (const [id, row] of mode === 'download' || !tables.includes('reviews') ? [] : captured.tables.reviews) {
     if (!active()) return
     if (!aliveNotes.has((row as ReviewRecord).noteId)) continue
     const pendingLogs = [...captured.tables.reviewLogs.values()].filter(log => {
@@ -117,7 +118,7 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
   await db.transaction('rw', db.tables, async () => {
     if (!active()) return
     if (mode === 'download') {
-      for (const table of rowTables) {
+      for (const table of tables) {
         const current = (await db[table].toArray()).sort((a, b) => a.id.localeCompare(b.id))
         const before = [...captured.tables[table].values()].sort((a, b) => a.id.localeCompare(b.id))
         if (stable(current) !== stable(before)) throw Object.assign(new Error('Local data changed during download'), { code: 'LOCAL_CHANGED_DURING_DOWNLOAD' })
@@ -134,7 +135,7 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
       await db.syncBackups.bulkDelete(backups.slice(3).map(row => row.id))
     }
     const acknowledgements: SyncedRow[] = []
-    for (const table of rowTables) {
+    for (const table of tables) {
       const current = new Map((await db[table].toArray()).map(row => [row.id, row as LocalRow]))
       const ids = new Set([...current.keys(), ...remote[table].keys(), ...captured.tables[table].keys()])
       for (const id of ids) {
@@ -161,16 +162,16 @@ export async function syncRowCycle(db: VocabDatabase, transport: RowTransport, a
         if (server) acknowledgements.push({ key: key(table, id), table, id, remote: server, value: incoming ? encodeRow(table, incoming) : null })
       }
     }
-    await db.syncRows.clear()
+    await db.syncRows.where('table').anyOf([...tables]).delete()
     await db.syncRows.bulkPut(acknowledgements)
-    await db.syncMeta.put({ id: 'current', lastSyncAt: new Date().toISOString(), mode })
+    await db.syncMeta.put({ id: tables === rowTables ? 'current' : 'grammar-auto', lastSyncAt: new Date().toISOString(), mode })
   })
 }
 export async function restoreSyncBackup(db: VocabDatabase) {
   await db.transaction('rw', db.tables, async () => {
     const backup = await db.syncBackups.orderBy('createdAt').last()
     if (!backup) throw new Error('Chưa có bản khôi phục local.')
-    for (const table of rowTables) { await db[table].clear(); await db.table(table).bulkPut(backup.tables[table]) }
+    for (const table of rowTables) { await db[table].clear(); await db.table(table).bulkPut(backup.tables[table] ?? []) }
     await db.syncRows.clear(); await db.syncRows.bulkPut(backup.bases)
   })
 }

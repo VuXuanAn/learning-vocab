@@ -30,6 +30,20 @@ test('Reading storage requires owned folder, preserves note and clears detected 
   assert.equal(removed.deletedAt,now);assert.equal(removed.metadataSynced,false)
  }finally{await db.delete()}
 })
+
+test('Reference detections persist in article JSON without creating vocabulary or review records',async()=>{
+ const db=new VocabDatabase('reading-reference-'+crypto.randomUUID()),now=new Date().toISOString()
+ try{
+  const folder={id:crypto.randomUUID(),ownerId:'owner',name:'Reference',createdAt:now,updatedAt:now}
+  await saveReadingFolder(folder,db)
+  const article=await saveReadingArticle({id:crypto.randomUUID(),ownerId:'owner',folderId:folder.id,title:'Reference',contentHtml:'<p>begun</p>',note:'',createdAt:now,updatedAt:now},db)
+  const detection={html:article.contentHtml,createdAt:now,matches:[{start:1,end:6,noteId:'irregular:begin',word:'begun'}]}
+  await saveReadingArticle({...article,detection},db)
+  assert.deepEqual((await db.readingArticles.get(article.id)).detection,detection)
+  assert.equal(await db.notes.count(),0)
+  assert.equal(await db.reviews.count(),0)
+ }finally{await db.delete()}
+})
 test('Reading SQL migration can rerun and isolates accounts for reads, writes and folder ownership',async()=>{
  const db=new PGlite(),a='00000000-0000-0000-0000-000000000001',b='00000000-0000-0000-0000-000000000002',folder='10000000-0000-0000-0000-000000000001',article='20000000-0000-0000-0000-000000000001'
  async function actor(id){await db.exec(`reset role;select set_config('request.jwt.claim.sub','${id}',false);set role authenticated;`)}

@@ -1,0 +1,3 @@
+Irregular verb IPA uses the catalog subset of [ipa-dict](https://github.com/open-dict-data/ipa-dict), English (General American), under the adjacent MIT license. The generation script supplements the source with reviewed verb forms, homograph corrections, and compound pronunciations composed from prefixes and stems. Past forms of `read` and its compounds are resolved separately from their spelling.
+
+Run `node scripts/build-irregular-ipa.mjs` to regenerate the bundled data. The application loads this data locally and does not call a pronunciation API. Audio uses the existing browser speech engine; no audio recordings are bundled.

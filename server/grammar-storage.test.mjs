@@ -7,10 +7,37 @@ import Dexie from 'dexie'
 const url=source=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64')
 const dbUrl=url(readFileSync('src/lib/db.ts','utf8').replace("'dexie'",JSON.stringify(import.meta.resolve('dexie'))))
 const {VocabDatabase}=await import(dbUrl)
-const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
+const documentUrl=url(readFileSync('src/lib/grammar-document.ts','utf8'))
+const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
 const now=()=>new Date().toISOString()
 const folderRow=(ownerId='owner')=>({id:crypto.randomUUID(),ownerId,name:'Grammar',nameKey:'grammar',createdAt:now(),updatedAt:now()})
 const entryRow=folder=>({id:crypto.randomUUID(),ownerId:folder.ownerId,folderId:folder.id,title:'My grammar',topic:'',structure:'S + V',usage:'Cách dùng',example:'An example.',translation:'Ví dụ.',notes:'My notes',status:'review',createdAt:now(),updatedAt:now()})
+
+test('Structured grammar retains formulas, usage ids and paired examples through edits and cloud encoding',async()=>{
+ const {withGrammarDocument,grammarDocument}=await import(documentUrl)
+ const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+ const db=new VocabDatabase('structured-grammar-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const document={name:'Hiện tại đơn - Present Simple',category:'tenses',level:'A1',structures:[{id:1,type:'Khẳng định',formula:'S + V(s/es) + O'},{id:2,type:'Phủ định',formula:'S + do/does + not + V + O'},{id:3,type:'Nghi vấn',formula:'Do/Does + S + V + O?'}],usages:[{id:1,content:'Diễn tả thói quen, hành động lặp lại.'},{id:2,content:'Diễn tả sự thật hiển nhiên.'},{id:10,content:''}],examples:[{id:1,en:'I study English every day.',vi:'Tôi học tiếng Anh mỗi ngày.'},{id:2,en:"She doesn't drink coffee.",vi:'Cô ấy không uống cà phê.'}],notes:'He/She/It + V(s/es).'}
+  const saved=await saveGrammarEntry(withGrammarDocument(entryRow(folder),document),db)
+  assert.equal(saved.name,document.name);assert.equal(saved.title,document.name)
+  assert.deepEqual(saved.structures,document.structures)
+  assert.deepEqual(saved.usages,document.usages.slice(0,2))
+  assert.deepEqual(saved.examples,document.examples)
+  db.close();await db.open()
+  assert.deepEqual((await db.grammarEntries.get(saved.id)).examples,document.examples)
+  const wire=encodeRow('grammarEntries',saved)
+  const cloud=decodeRow('grammarEntries',{id:saved.id,owner_id:saved.ownerId,folder_id:saved.folderId,...JSON.parse(JSON.stringify(wire))})
+  assert.deepEqual(grammarDocument(cloud),grammarDocument(saved))
+  const edited=await saveGrammarEntry(withGrammarDocument(cloud,{...grammarDocument(cloud),structures:[document.structures[0],{id:4,type:'Bổ sung',formula:'S + be + adj'}],examples:[document.examples[1]]}),db)
+  assert.deepEqual(edited.structures.map(row=>row.id),[1,4])
+  assert.deepEqual(edited.examples,[document.examples[1]])
+  await assert.rejects(()=>saveGrammarEntry(withGrammarDocument(edited,{...grammarDocument(edited),structures:[]}),db))
+  await assert.rejects(()=>saveGrammarEntry(withGrammarDocument(edited,{...grammarDocument(edited),structures:[{id:1,type:'Missing',formula:''}]}),db))
+  await assert.rejects(()=>saveGrammarEntry(withGrammarDocument(edited,{...grammarDocument(edited),examples:[{id:1,en:'',vi:'Chỉ có bản dịch'}]}),db))
+ }finally{await db.delete()}
+})
 test('Grammar starts empty and persists user content, line breaks and account isolation',async()=>{
  const a=new VocabDatabase('grammar-a-'+crypto.randomUUID()),b=new VocabDatabase('grammar-b-'+crypto.randomUUID())
  try{

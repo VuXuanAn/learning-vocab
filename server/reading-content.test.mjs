@@ -10,8 +10,11 @@ const url=source=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptType
 const related=url(readFileSync('src/lib/related-words.ts','utf8'))
 const grammarUrl=url(readFileSync('src/lib/reading-grammar.ts','utf8'))
 const similarity=url(readFileSync('src/lib/reading-similarity.ts','utf8'))
+const ipaUrl=url(readFileSync('src/lib/irregular-ipa.ts','utf8'))
+const irregularUrl=url(readFileSync('src/lib/irregular-verbs.ts','utf8').replace("'./irregular-ipa'",JSON.stringify(ipaUrl)))
 const source=readFileSync('src/lib/reading-content.ts','utf8').replace("import DOMPurify from 'dompurify'",'const DOMPurify=globalThis.__readingPurify').replace("'./related-words'",JSON.stringify(related)).replace("'./reading-similarity'",JSON.stringify(similarity)).replace("'./reading-grammar'",JSON.stringify(grammarUrl))
-const {cleanReadingHtml,detectReadingVocab,renderReadingHtml,readingSelection,highlightReadingGrammar}=await import(url(source))
+const integratedSource=source.replace("'./irregular-verbs'",JSON.stringify(irregularUrl))
+const {cleanReadingHtml,detectReadingVocab,renderReadingHtml,readingSelection,highlightReadingGrammar}=await import(url(integratedSource))
 const note=(id,word)=>({id,kind:'basic',front:word,back:'Meaning',tags:'',createdAt:0,extra:''})
 function root(html){const el=document.createElement('div');el.innerHTML=html;return el}
 test('Reading HTML is sanitized before rendering; scripts, controls, handlers and unsafe URLs cannot survive',()=>{
@@ -36,17 +39,17 @@ test('Detect is explicit, case insensitive, whole word, longest phrase first and
 test('Editing content invalidates old matches, deleted vocab is no longer linked, existing links and code remain untouched',async()=>{
  const html='<p>cat catch <a href="https://example.com">cat</a> <code>cat</code> cat.</p>'
  const detection=await detectReadingVocab(html,[note('cat','cat')])
- assert.equal(detection.matches.length,2)
+ assert.equal(detection.matches.length,3) // Includes the reference verb "catch".
  assert.equal(root(renderReadingHtml(html+'more',detection,new Set(['cat']))).querySelectorAll('[data-reading-note]').length,0)
- assert.equal(root(renderReadingHtml(html,detection,new Set())).querySelectorAll('[data-reading-note]').length,0)
- assert.equal(root(renderReadingHtml(html,detection,new Set(['cat']))).querySelectorAll('[data-reading-note]').length,2)
+ assert.equal(root(renderReadingHtml(html,detection,new Set())).querySelectorAll('[data-reading-note]').length,1)
+ assert.equal(root(renderReadingHtml(html,detection,new Set(['cat']))).querySelectorAll('[data-reading-note]').length,3)
 })
 test('Detection supports cancellation without leaving partial links',async()=>{
  const controller=new AbortController();controller.abort()
  await assert.rejects(()=>detectReadingVocab('<p>word</p>',[note('word','word')],controller.signal))
 })
 
-const {translationChunks}=await import(url(readFileSync('src/lib/reading-translation.ts','utf8').replace("'./reading-content'",JSON.stringify(url(source)))))
+const {translationChunks}=await import(url(readFileSync('src/lib/reading-translation.ts','utf8').replace("'./reading-content'",JSON.stringify(url(integratedSource)))))
 test('Translation includes links, code, tables and every chunk of long passages within API limits',()=>{
  const chunks=translationChunks('<h2>Title</h2><p>Hello <a href="https://example.com">link</a><br>New line <code>code</code></p><table><tr><td>Left</td><td>Right</td></tr></table><p>'+('word 😀 '.repeat(2500))+'</p>')
  assert.ok(chunks.length>1)
@@ -62,20 +65,20 @@ test('Translation includes links, code, tables and every chunk of long passages 
 test('Inflections and typos require suggestions while exact matches link immediately',async()=>{
  const notes=[note('pin','pinpoint'),note('run','run'),note('study','study'),note('write','write'),note('child','child'),note('wander','wander'),note('planet','planet'),note('plant','plant')]
  const result=await detectReadingVocab('<p>pinpoint Pinpointing pinpoiting running studied written children wandered planit cat</p>',notes)
- assert.deepEqual(result.matches.map(match=>match.noteId),['pin'])
+ assert.deepEqual(result.matches.map(match=>match.noteId),['pin','irregular:write'])
  const candidates=word=>result.suggestions.find(row=>row.word===word)?.candidates.map(item=>item.noteId)
  assert.ok(candidates('Pinpointing').includes('pin'))
  assert.ok(candidates('pinpoiting').includes('pin'))
  assert.ok(candidates('running').includes('run'))
  assert.ok(candidates('studied').includes('study'))
- assert.ok(candidates('written').includes('write'))
+ assert.equal(candidates('written'),undefined) // V3 is now a known exact reference form.
  assert.ok(candidates('children').includes('child'))
  assert.ok(candidates('wandered').includes('wander'))
  assert.ok(candidates('planit').includes('planet'))
  assert.ok(candidates('planit').includes('plant'))
  assert.equal(candidates('cat'),undefined)
  assert.equal(result.suggestions.some(row=>row.word==='pinpoint'),false)
- assert.equal(root(renderReadingHtml(result.html,result,new Set(notes.map(row=>row.id)))).querySelectorAll('[data-reading-note]').length,1)
+ assert.equal(root(renderReadingHtml(result.html,result,new Set(notes.map(row=>row.id)))).querySelectorAll('[data-reading-note]').length,2)
 })
 test('Suggestions group occurrences with correct offsets, exclude exact phrases and protected markup, and preserve confirmed choices',async()=>{
  const html='<p>Pinpointing, <strong>pinpointing</strong>. Break the ice. <a href="https://example.com">pinpointing</a><code>pinpointing</code></p>'
@@ -191,4 +194,72 @@ test('Manual assignments highlight the entire selected passage and preserve link
  const second=root(highlightReadingGrammar(html,html,[entry],'second'))
  assert.equal(second.querySelector('mark').textContent,'They')
  assert.equal(root(highlightReadingGrammar(html,html,[entry],'other')).querySelector('mark'),null)
+})
+
+const {irregularVerbs,searchIrregularVerbs,irregularVerbForms,findIrregularVerb,verbPronunciations}=await import(irregularUrl)
+test('All reference forms have persisted IPA, including contextual read and verb homographs',()=>{
+ for(const verb of irregularVerbs)for(const form of ['base','past','participle']){
+  const values=verbPronunciations(verb,form)
+  assert.equal(values.length,verb[form].split(' / ').length)
+  for(const row of values)assert.match(row.ipa,/^\/[^/?]+\/$/u,verb.base+' '+form)
+ }
+ for(const base of ['read','misread','reread','preread','lip-read','proofread']){
+  const verb=irregularVerbs.find(verb=>verb.base===base)
+  assert.match(verbPronunciations(verb,'base')[0].ipa,/rid\/$/u)
+  assert.match(verbPronunciations(verb,'past')[0].ipa,/rɛd\/$/u)
+  assert.match(verbPronunciations(verb,'participle')[0].ipa,/rɛd\/$/u)
+ }
+ assert.equal(verbPronunciations(findIrregularVerb('irregular:begin'),'participle')[0].ipa,'/bɪˈɡʌn/')
+ assert.equal(verbPronunciations(findIrregularVerb('irregular:wind'),'base')[0].ipa,'/waɪnd/')
+ assert.equal(verbPronunciations(findIrregularVerb('irregular:wind'),'past')[0].ipa,'/waʊnd/')
+})
+test('Irregular colors use the actual passage for legacy and confirmed card matches',()=>{
+ const html='<p>How did language evolve? They have been here.</p>'
+ const text='\nHow did language evolve? They have been here.\n'
+ const words=['did','evolve','have','been']
+ const detection={html,createdAt:new Date().toISOString(),matches:words.map(word=>({start:text.indexOf(word),end:text.indexOf(word)+word.length,noteId:'saved-'+word,word:'Legacy card label',confirmed:true}))}
+ const displayed=root(renderReadingHtml(html,detection,new Set(words.map(word=>'saved-'+word))))
+ for(const word of ['did','have','been'])assert.ok(displayed.querySelector('[data-reading-note="saved-'+word+'"]').classList.contains('reading-irregular-link'))
+ assert.ok(!displayed.querySelector('[data-reading-note="saved-evolve"]').classList.contains('reading-irregular-link'))
+})
+test('Reference catalog has 360 unique complete entries and searches all three forms without accents',()=>{
+ assert.equal(irregularVerbs.length,360)
+ assert.equal(new Set(irregularVerbs.map(verb=>verb.base)).size,360)
+ for(const verb of irregularVerbs){
+  assert.ok(verb.base&&verb.past&&verb.participle&&verb.meaning)
+  assert.ok(!verb.meaning.includes('?'))
+  for(const form of irregularVerbForms(verb))assert.match(form,/^[a-z]+(?:-[a-z]+)*$/)
+ }
+ for(const term of ['begin','began','begun',' BEGUN '])assert.equal(searchIrregularVerbs(term)[0].base,'begin')
+ assert.equal(searchIrregularVerbs('went')[0].base,'go')
+ assert.equal(searchIrregularVerbs('written')[0].base,'write')
+ assert.ok(searchIrregularVerbs('bat dau').some(verb=>verb.base==='begin'))
+ assert.equal(findIrregularVerb('irregular:rewrite').participle,'rewritten')
+ assert.equal(findIrregularVerb('irregular:not-a-verb'),undefined)
+})
+test('Reading detects V1, V2, V3 and alternative forms as reference links without saved notes',async()=>{
+ const html='<p>Begin began <strong>begun</strong>, went gone, got gotten, hand-fed. beginner <a href="https://example.com">began</a> <code>gone</code></p>'
+ const result=await detectReadingVocab(html,[])
+ assert.deepEqual(result.matches.map(match=>match.noteId),['irregular:begin','irregular:begin','irregular:begin','irregular:go','irregular:go','irregular:get','irregular:get','irregular:hand-feed'])
+ assert.equal(result.suggestions.length,0)
+ const displayed=root(renderReadingHtml(html,result,new Set()))
+ assert.equal(displayed.querySelectorAll('[data-reading-note]').length,8)
+ assert.equal(displayed.querySelector('strong a').dataset.readingNote,'irregular:begin')
+ assert.equal(displayed.textContent,root(html).textContent)
+ const range=document.createRange();range.selectNodeContents(displayed.querySelector('p'))
+ assert.ok(readingSelection(html,displayed,range))
+ const restored=JSON.parse(JSON.stringify(result))
+ assert.equal(root(renderReadingHtml(html,restored,new Set())).querySelectorAll('[data-reading-note]').length,8)
+})
+test('Saved vocabulary has priority over references, phrases stay intact and reference ids are validated',async()=>{
+ const html='<p>begin began begun break the ice</p>'
+ const result=await detectReadingVocab(html,[note('my-begin','begin'),note('my-began','began'),note('phrase','break the ice')])
+ assert.deepEqual(result.matches.map(match=>match.noteId),['my-begin','my-began','irregular:begin','phrase'])
+ const displayed=root(renderReadingHtml(html,result,new Set(['my-begin','my-began','phrase'])))
+ assert.equal(displayed.querySelectorAll('[data-reading-note]').length,4)
+ assert.equal(displayed.querySelectorAll('.reading-irregular-link').length,3)
+ assert.ok(displayed.querySelector('[data-reading-note="my-begin"]').classList.contains('reading-irregular-link'))
+ assert.ok(!displayed.querySelector('[data-reading-note="phrase"]').classList.contains('reading-irregular-link'))
+ const forged={...result,matches:result.matches.map(match=>({...match,noteId:'irregular:fake'}))}
+ assert.equal(root(renderReadingHtml(html,forged,new Set())).querySelectorAll('[data-reading-note]').length,0)
 })

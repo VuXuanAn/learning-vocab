@@ -1,14 +1,15 @@
+import type { GrammarEntry, GrammarFolder } from './grammar-types'
 import type { Note } from './cards'
 import type { VocabularyFolder } from './folders'
 import type { CardTemplate } from './templates'
 import type { ReviewRecord } from './review'
 import type { SavedReviewLog } from './review-storage'
-export const rowTables = ['folders', 'templates', 'notes', 'reviews', 'reviewLogs'] as const
+export const rowTables = ['folders', 'templates', 'notes', 'reviews', 'reviewLogs', 'grammarFolders', 'grammarEntries'] as const
 export type RowTable = typeof rowTables[number]
-export type LocalRow = VocabularyFolder | CardTemplate | Note | ReviewRecord | SavedReviewLog
+export type LocalRow = VocabularyFolder | CardTemplate | Note | ReviewRecord | SavedReviewLog | GrammarEntry | GrammarFolder
 export type WireRow = Record<string, any> // SQL records have different columns per table.
 export interface SyncedRow { key: string; table: RowTable; id: string; remote: WireRow; value: WireRow | null }
-export const sqlTables: Record<RowTable, string> = { folders: 'folders', templates: 'card_templates', notes: 'notes', reviews: 'user_card_progress', reviewLogs: 'review_logs' }
+export const sqlTables: Record<RowTable, string> = { folders: 'folders', templates: 'card_templates', notes: 'notes', reviews: 'user_card_progress', reviewLogs: 'review_logs', grammarFolders: 'grammar_folders', grammarEntries: 'grammar_entries' }
 export function stable(value: unknown): string {
   if (value === undefined) return 'undefined'
   return JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) && !(item instanceof Date) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)
@@ -22,6 +23,10 @@ export function localId(table: RowTable, row: WireRow): string {
 }
 export function encodeRow(table: RowTable, local: LocalRow): WireRow {
   const row = local as any
+  if (table === 'grammarFolders' || table === 'grammarEntries') {
+    const { id: _id, ownerId: _ownerId, ...data } = row
+    return { data, ...(table === 'grammarEntries' ? { folder_id: row.folderId } : {}) }
+  }
   if (table === 'folders') return { name: row.name, parent_id: row.parentId || null, reverse_cards: !!row.reverseCards }
   if (table === 'templates') return { definition: row }
   if (table === 'notes') return { folder_id: row.folderId, kind: row.kind, front: row.front, back: row.back, extra: row.extra, tags: row.tags, field_values: row.values ?? {}, template: row.template ?? null }
@@ -30,6 +35,7 @@ export function encodeRow(table: RowTable, local: LocalRow): WireRow {
   return JSON.parse(JSON.stringify({ note_id: noteId, card_key: cardKey(id, noteId), due: row.due, fsrs, last_rating: lastRating, review_revision: revision }))
 }
 export function decodeRow(table: RowTable, row: WireRow): LocalRow {
+  if (table === 'grammarFolders' || table === 'grammarEntries') return { ...row.data, id: row.id, ownerId: row.owner_id, ...(table === 'grammarEntries' ? { folderId: row.folder_id } : {}) } as GrammarEntry | GrammarFolder
   if (table === 'folders') return { id: row.id, name: row.name, nameKey: row.name.toLocaleLowerCase('vi'), parentId: row.parent_id ?? '', reverseCards: row.reverse_cards, createdAt: Date.parse(row.created_at), ownerId: row.owner_id, permission: row.permission }
   if (table === 'templates') return { ...row.definition, id: row.id }
   if (table === 'notes') return { id: row.id, readOnly: !!row.readOnly, folderId: row.folder_id, kind: row.kind, front: row.front, back: row.back, extra: row.extra, tags: row.tags, values: row.field_values, template: row.template ?? undefined, createdAt: Date.parse(row.created_at) }

@@ -1,3 +1,6 @@
+import IrregularVerbsPage from './pages/IrregularVerbsPage'
+import LearningRail from './lib/LearningRail'
+import GrammarSyncProvider from './lib/GrammarSyncProvider'
 import GrammarPage from './pages/GrammarPage'
 import FloatingAIChat from './lib/FloatingAIChat'
 import DriveConnectionInitializer from './lib/DriveConnectionInitializer'
@@ -23,7 +26,7 @@ import LandingPage from './pages/LandingPage'
 import ReviewPage from './pages/ReviewPage'
 
 export default function App() {
-  return <BrowserRouter><AuthProvider><DriveConnectionInitializer/><Toaster richColors position="top-right"/><Routes><Route element={<PublicLayout/>}><Route index element={<HomeEntry/>}/><Route element={<ProtectedLayout/>}><Route path="folders" element={<HomePage/>}/><Route path="speaking" element={<SpeakingPage key="list" mode="list"/>}/><Route path="speaking/lessons/:lessonId" element={<SpeakingPage key="detail" mode="detail"/>}/><Route path="speaking/practice" element={<SpeakingPage key="practice" mode="practice"/>}/><Route path="reading" element={<ReadingPage key="reading-list"/>}/><Route path="reading/articles/:articleId" element={<ReadingPage key="reading-detail"/>}/><Route path="grammar" element={<GrammarPage/>}/><Route path="cards" element={<CardManagerPage/>}/><Route path="add" element={<AddVocabularyPage/>}/><Route path="settings" element={<SettingsPage/>}/><Route path="review" element={<ReviewPage/>}/></Route><Route path="*" element={<Navigate to="/" replace/>}/></Route></Routes></AuthProvider></BrowserRouter>
+  return <BrowserRouter><AuthProvider><DriveConnectionInitializer/><Toaster richColors position="top-right"/><Routes><Route element={<PublicLayout/>}><Route index element={<HomeEntry/>}/><Route element={<ProtectedLayout/>}><Route path="folders" element={<HomePage/>}/><Route path="speaking" element={<SpeakingPage key="list" mode="list"/>}/><Route path="speaking/lessons/:lessonId" element={<SpeakingPage key="detail" mode="detail"/>}/><Route path="speaking/practice" element={<SpeakingPage key="practice" mode="practice"/>}/><Route path="reading" element={<ReadingPage key="reading-list"/>}/><Route path="reading/articles/:articleId" element={<ReadingPage key="reading-detail"/>}/><Route path="grammar" element={<GrammarPage/>}/><Route path="irregular-verbs" element={<IrregularVerbsPage/>}/><Route path="cards" element={<CardManagerPage/>}/><Route path="add" element={<AddVocabularyPage/>}/><Route path="settings" element={<SettingsPage/>}/><Route path="review" element={<ReviewPage/>}/></Route><Route path="*" element={<Navigate to="/" replace/>}/></Route></Routes></AuthProvider></BrowserRouter>
 }
 function HomeEntry() { const {session}=useAuth(); return session ? <Navigate to="/folders" replace/> : <LandingPage/> }
 function PublicLayout() {
@@ -36,5 +39,5 @@ function ProtectedLayout() {
   const { session, loading } = useAuth()
   if (loading) return <main className="p-12 text-center text-slate-500" role="status">Đang kiểm tra đăng nhập…</main>
   if (!session) return <Navigate to="/" replace/>
-  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><VocabularySyncProvider><AddVocabularyProvider><MeaningReminderProvider><Outlet/></MeaningReminderProvider></AddVocabularyProvider></VocabularySyncProvider></PreferencesSyncProvider></AccountWorkspace>
+  return <AccountWorkspace key={session.user.id} userId={session.user.id}><PreferencesSyncProvider><VocabularySyncProvider><GrammarSyncProvider><AddVocabularyProvider><MeaningReminderProvider><div className="learning-layout"><div className="learning-content"><Outlet/></div><LearningRail/></div></MeaningReminderProvider></AddVocabularyProvider></GrammarSyncProvider></VocabularySyncProvider></PreferencesSyncProvider></AccountWorkspace>
 }

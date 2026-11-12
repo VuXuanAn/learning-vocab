@@ -1,10 +1,22 @@
 import { z } from 'zod'
 import { db, type VocabDatabase } from './db'
 import type { GrammarEntry, GrammarFolder } from './grammar-types'
+import { cleanGrammarDocument } from './grammar-document'
 const sourceSchema=z.object({exactSelection:z.boolean().optional(),articleId:z.string().uuid(),articleTitle:z.string().max(160),contentHtml:z.string().max(200000),quote:z.string().min(1).max(10000),start:z.number().int().min(0),end:z.number().int().min(1),highlights:z.array(z.object({start:z.number().int().min(0),end:z.number().int().min(1)})).min(1).max(10000)})
-const schema=z.object({source:sourceSchema.optional(),sources:z.array(sourceSchema).max(1000).optional(),id:z.string().uuid(),ownerId:z.string().min(1),folderId:z.string().uuid(),title:z.string().trim().min(1).max(160),topic:z.string().trim().max(100),structure:z.string().trim().min(1).max(5000),usage:z.string().trim().max(20000),example:z.string().trim().max(10000),translation:z.string().trim().max(10000),notes:z.string().trim().max(20000),status:z.enum(['review','learned']),createdAt:z.string(),updatedAt:z.string()})
+const schema=z.object({source:sourceSchema.optional(),sources:z.array(sourceSchema).max(1000).optional(),id:z.string().uuid(),ownerId:z.string().min(1),folderId:z.string().uuid(),title:z.string().trim().min(1).max(160),topic:z.string().trim().max(100),structure:z.string().trim().min(1).max(5000),usage:z.string().trim().max(20000),example:z.string().trim().max(10000),translation:z.string().trim().max(10000),notes:z.string().trim().max(20000),createdAt:z.string(),updatedAt:z.string()})
 export async function saveGrammarEntry(row:GrammarEntry,account:VocabDatabase=db){
- const parsed=schema.parse({...row,updatedAt:new Date().toISOString()})
+ const structuredSchema=schema.extend({
+  structure:z.string().trim().min(1).max(153030),usage:z.string().trim().max(1000050),example:z.string().trim().max(500050),translation:z.string().trim().max(500050),
+  name:z.string().trim().min(1).max(160).optional(),category:z.string().trim().max(100).optional(),level:z.enum(['','A1','A2','B1','B2','C1','C2']).optional(),
+  structures:z.array(z.object({id:z.number().int().positive(),type:z.string().trim().max(100),formula:z.string().trim().min(1,'Nhập công thức ngữ pháp.').max(5000)})).min(1,'Thêm ít nhất một cấu trúc.').max(30).optional(),
+  usages:z.array(z.object({id:z.number().int().positive(),content:z.string().trim().min(1).max(20000)})).max(50).optional(),
+  examples:z.array(z.object({id:z.number().int().positive(),en:z.string().trim().min(1,'Nhập câu ví dụ tiếng Anh.').max(10000),vi:z.string().trim().max(10000)})).max(50).optional(),
+ })
+ const prepared=row.structures||row.usages||row.examples?cleanGrammarDocument(row):row
+ const result=structuredSchema.safeParse({...prepared,updatedAt:new Date().toISOString()})
+ if(!result.success)throw new Error(result.error.issues.map(issue=>issue.message).join(' '))
+ const parsed=result.data
+ for(const rows of [parsed.structures,parsed.usages,parsed.examples])if(rows&&new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('ID trong mỗi danh sách phải khác nhau.')
  return account.transaction('rw',account.grammarEntries,account.grammarFolders,account.readingArticles,async()=>{
   const folder=await account.grammarFolders.get(parsed.folderId)
   if(!folder||folder.ownerId!==parsed.ownerId)throw new Error('Hãy chọn thư mục Grammar của bạn.')

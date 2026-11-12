@@ -1,4 +1,6 @@
 import StyledSelect from '@/components/ui/styled-select'
+import { findIrregularVerb } from './irregular-verbs'
+import IrregularVerbDetails from './IrregularVerbDetails'
 import ReadingSources from './ReadingSources'
 ﻿import { useState, type RefObject } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -8,16 +10,18 @@ import { db } from './db'
 import { generateCards } from './cards'
 import AIVocabularyCard from './AIVocabularyCard'
 import CardHtml from './CardHtml'
-export default function LinkedCardDialog({ portalContainer }: { portalContainer: RefObject<HTMLElement | null> }) {
+export default function LinkedCardDialog({ portalContainer, selectedNoteId, onClose }: { portalContainer: RefObject<HTMLElement | null>; selectedNoteId?: string; onClose?: () => void }) {
   const [params, setParams] = useSearchParams()
-  const id = params.get('note') ?? ''
+  const id = selectedNoteId ?? params.get('note') ?? ''
+  const irregularVerb = findIrregularVerb(id)
   const record = useLiveQuery(async () => ({ note: id ? await db.notes.get(id) : undefined }), [id])
   const note = record?.note
   const cards = note ? generateCards(note) : []
   const [selection, setSelection] = useState({id: '', index: 0})
   const selectedIndex = selection.id === id ? selection.index : 0
   const card = cards[selectedIndex] ?? cards[0]
-  return <Dialog open={!!id} onOpenChange={open => { if (!open) setParams(previous => { const next = new URLSearchParams(previous); next.delete('note'); return next }, {replace:true}) }}><DialogContent portalContainer={portalContainer} className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl" onKeyDown={event => {
+  if (irregularVerb) return <Dialog open onOpenChange={open => { if (open) return; if (selectedNoteId !== undefined) { onClose?.(); return } setParams(previous => { const next=new URLSearchParams(previous); next.delete('note'); return next }, {replace:true}) }}><DialogContent portalContainer={portalContainer} className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-2xl"><DialogHeader className="border-b px-6 py-5 pr-12"><DialogTitle>Động từ bất quy tắc</DialogTitle><DialogDescription>Tra cứu dạng động từ và nghĩa tiếng Việt.</DialogDescription></DialogHeader><IrregularVerbDetails verb={irregularVerb}/></DialogContent></Dialog>
+  return <Dialog open={!!id} onOpenChange={open => { if (!open && selectedNoteId !== undefined) { onClose?.(); return } if (!open) setParams(previous => { const next = new URLSearchParams(previous); next.delete('note'); return next }, {replace:true}) }}><DialogContent portalContainer={portalContainer} className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl" onKeyDown={event => {
     if (event.key.toLowerCase() !== 's' || event.ctrlKey || event.altKey || event.metaKey || event.repeat || event.nativeEvent.isComposing || (event.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"]')) return
     event.preventDefault(); event.stopPropagation()
     event.currentTarget.querySelector<HTMLButtonElement>('[data-study-speech="true"]:not(:disabled)')?.click()

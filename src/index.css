@@ -65,9 +65,22 @@ button, a, input, select, textarea { outline-offset: 4px; }
 .reading-content a { color: #047857; text-decoration: underline; text-underline-offset: 3px; }
 .reading-content .reading-vocab-link { background: #ecfdf5; text-decoration-style: dotted; border-radius: 3px; }
 .reading-content .reading-vocab-link:hover { background: #d1fae5; }
+.reading-content .reading-irregular-link { color: #7e22ce; background: #f3e8ff; text-decoration-color: #a855f7; }
+.reading-content .reading-irregular-link:hover,
+.reading-content .reading-irregular-link:focus-visible { background: #e9d5ff; }
 
 /* The signed-in workspace owns its viewport. Each page chooses its scroll regions. */
 .app-workspace { position: fixed; inset: 0; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.learning-layout { display: flex; flex: 1 1 0%; min-height: 0; min-width: 0; overflow: hidden; }
+.learning-content { display: flex; flex: 1 1 0%; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.learning-rail { display: none; }
+@media (min-width: 1280px) {
+ .learning-rail { display: block; width: 280px; flex: 0 0 280px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-left: 1px solid #e2e8f0; background: #f8faf9; padding: 24px 16px 96px; }
+ .learning-layout:has([data-focus-mode="true"]) .learning-rail { display: none; }
+}
+@media (min-width: 1536px) {
+ .learning-rail { width: 320px; flex-basis: 320px; padding-left: 20px; padding-right: 20px; }
+}
 .workspace-page { display: flex; flex-direction: column; flex: 1 1 0%; height: 100%; min-height: 0; min-width: 0; overflow: hidden; }
 .workspace-page > :not(.reading-columns):not(.reading-list):not(.speaking-body):not(section) { flex-shrink: 0; }
 .workspace-scroll { flex: 1 1 0%; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }

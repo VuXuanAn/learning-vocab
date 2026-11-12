@@ -4,6 +4,8 @@ Frontend dùng trực tiếp các bảng `folders`, `folder_members`, `notes`, `
 
 ## SQL cần chạy
 
+Grammar: run `migrations/013_grammar_library.sql` in the Supabase SQL Editor. Grammar automatically merges on startup, local folder/entry changes (including Reading assignments), online and window focus. Failed requests retry after 30 seconds; pending changes and deletions survive reloads. Automatic sync touches only Grammar tables and their acknowledgements; vocabulary remains manual. Grammar has no study status or FSRS schedule. Content notes and source highlights are preserved. The shared manual sync and backup tools remain compatible with Grammar data. Owner RLS and a composite folder-owner foreign key protect the two cloud tables.
+
 Reading: chạy thêm `migrations/011_reading_library.sql` để tạo bảng thư mục/bài đọc, sau đó `migrations/012_reading_study_notes.sql` cho ghi chú học tập có loại (ngữ pháp/cấu trúc câu/cách diễn đạt/khác), với RLS theo tài khoản. Chi tiết lưu trữ, HTML và Detect vocab tại [READING.md](READING.md).
 
 Mở Supabase Dashboard → SQL Editor bằng role postgres:

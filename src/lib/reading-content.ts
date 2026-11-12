@@ -1,4 +1,5 @@
 import { grammarHighlightRanges } from './reading-grammar'
+import { irregularVerbs, irregularVerbForms, irregularVerbId, findIrregularVerb, isIrregularVerbForm } from './irregular-verbs'
 import type { GrammarEntry } from './grammar-types'
 import { createReadingSimilarity, type ReadingSuggestion } from './reading-similarity'
 ﻿import DOMPurify from 'dompurify'
@@ -36,6 +37,13 @@ export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortS
   if(!word||word.length>200||!/[\p{L}]/u.test(word)||/[<>\r\n]/u.test(word)||seen.has(key))continue
   seen.add(key);const first=key[0];const rows=groups.get(first)??[]
   rows.push({word,noteId:note.id,pattern:new RegExp(escape(word).replace(/ /g,'[^\\S\\r\\n]+'),'iyu')});groups.set(first,rows)
+ }
+ // Saved vocabulary wins when the same spelling exists in both sources.
+ for(const verb of irregularVerbs)for(const word of irregularVerbForms(verb)){
+  if(seen.has(word))continue
+  seen.add(word)
+  const rows=groups.get(word[0])??[]
+  rows.push({word,noteId:irregularVerbId(verb),pattern:new RegExp(escape(word),'iyu')});groups.set(word[0],rows)
  }
  for(const rows of groups.values())rows.sort((a,b)=>b.word.length-a.word.length)
  const matches:ReadingMatch[]=[]
@@ -76,9 +84,9 @@ export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortS
  return {html:clean,matches,createdAt:new Date().toISOString(),suggestions:[...suggestions.values()]}
 }
 export function renderReadingHtml(html:string,detection:{html:string;matches:ReadingMatch[]}|undefined,validNoteIds:Set<string>){
- const {root,spans}=readingDocument(html)
+ const {root,spans,text}=readingDocument(html)
  if(!detection||detection.html!==cleanReadingHtml(html))return root.innerHTML
- const matches=detection.matches.filter(match=>Number.isInteger(match.start)&&Number.isInteger(match.end)&&match.start>=0&&match.end>match.start&&validNoteIds.has(match.noteId)).sort((a,b)=>a.start-b.start)
+ const matches=detection.matches.filter(match=>Number.isInteger(match.start)&&Number.isInteger(match.end)&&match.start>=0&&match.end>match.start&&(validNoteIds.has(match.noteId)||findIrregularVerb(match.noteId))).sort((a,b)=>a.start-b.start)
  let matchIndex=0
  for(const span of spans){
   while(matchIndex<matches.length&&matches[matchIndex].end<=span.start)matchIndex++
@@ -88,7 +96,9 @@ export function renderReadingHtml(html:string,detection:{html:string;matches:Rea
    const start=Math.max(span.start,match.start)-span.start,end=Math.min(span.end,match.end)-span.start
    if(end<=start||start<cursor)continue
    fragment.append(document.createTextNode(value.slice(cursor,start)))
-   const link=document.createElement('a');link.href='?note='+encodeURIComponent(match.noteId);link.dataset.readingNote=match.noteId;link.textContent=value.slice(start,end);link.title='Mở thẻ: '+match.word;link.className='reading-vocab-link';fragment.append(link);cursor=end
+   // Old/confirmed detections can store a card label rather than the surface form.
+   const irregular=!!findIrregularVerb(match.noteId)||isIrregularVerbForm(text.slice(match.start,match.end))
+   const link=document.createElement('a');link.href='?note='+encodeURIComponent(match.noteId);link.dataset.readingNote=match.noteId;link.textContent=value.slice(start,end);link.title=(irregular?'Động từ bất quy tắc: ':'Mở thẻ: ')+match.word;link.className='reading-vocab-link'+(irregular?' reading-irregular-link':'');fragment.append(link);cursor=end
   }
   if(cursor){fragment.append(document.createTextNode(value.slice(cursor)));span.node.replaceWith(fragment)}
  }

@@ -43,6 +43,46 @@ function fixture() {
  }
  return {db,cloud,transport,writes,cycle:mode=>syncRowCycle(db,transport,()=>true,mode),setOffline:value=>{offline=value}}
 }
+
+test('Grammar uploads existing local data, restores reading sources on another device and propagates edits and deletion',async()=>{
+ const f=fixture(),other=new VocabDatabase('grammar-device-'+crypto.randomUUID())
+ const now=new Date().toISOString()
+ const folder={id:'gf',ownerId:'a',name:'Grammar',nameKey:'grammar',parentId:'parent',createdAt:now,updatedAt:now}
+ const entry={id:'ge',ownerId:'a',folderId:'gf',title:'Conditional',topic:'',structure:'If …',usage:'Line one\nLine two',example:'',translation:'',notes:'Keep',status:'review',createdAt:now,updatedAt:now,sources:[{articleId:'article',contentHtml:'<p>If I were you</p>',quote:'If I were you',start:0,end:13,highlights:[{start:0,end:2}]}]}
+ try{
+  await f.db.grammarFolders.put(folder);await f.db.grammarEntries.put(entry)
+  await f.cycle()
+  assert.deepEqual(f.writes.map(row=>row.table),['grammarFolders','grammarEntries'])
+  await syncRowCycle(other,f.transport)
+  assert.deepEqual(await other.grammarEntries.get('ge'),entry)
+  assert.deepEqual(await other.grammarFolders.get('gf'),folder)
+  await f.db.grammarEntries.update('ge',{notes:'Edited'})
+  await f.cycle();await syncRowCycle(other,f.transport)
+  assert.equal((await other.grammarEntries.get('ge')).notes,'Edited')
+  await f.db.grammarEntries.delete('ge');await f.cycle();await syncRowCycle(other,f.transport)
+  assert.equal(await other.grammarEntries.count(),0)
+  assert.ok(f.cloud.grammarEntries.get('ge').deleted_at)
+ }finally{await f.db.delete();await other.delete()}
+})
+test('Grammar-only sync preserves pending vocabulary and its sync acknowledgements',async()=>{
+ const f=fixture(),tables=['grammarFolders','grammarEntries'],now=new Date().toISOString()
+ try{
+  await f.db.folders.put(folder());await f.db.notes.put(note());await f.cycle()
+  const bases=await f.db.syncRows.toArray()
+  await f.db.notes.update('n',{front:'Pending vocabulary'})
+  await f.db.grammarFolders.put({id:'gf',ownerId:'a',name:'Grammar',nameKey:'grammar',createdAt:now,updatedAt:now})
+  f.writes.length=0
+  await syncRowCycle(f.db,f.transport,()=>true,'merge',tables)
+  assert.deepEqual(f.writes.map(row=>row.table),['grammarFolders'])
+  assert.equal((await f.db.notes.get('n')).front,'Pending vocabulary')
+  for(const base of bases)assert.deepEqual(await f.db.syncRows.get(base.key),base)
+  assert.ok(await f.db.syncMeta.get('grammar-auto'))
+  await f.db.grammarFolders.delete('gf')
+  await syncRowCycle(f.db,f.transport,()=>true,'merge',tables)
+  assert.ok(f.cloud.grammarFolders.get('gf').deleted_at)
+ }finally{await f.db.delete()}
+})
+
 test('adds parent folders first, uploads individual notes, edits and soft deletes only changed rows',async()=>{
  const f=fixture()
  try{

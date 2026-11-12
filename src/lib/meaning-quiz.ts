@@ -1,10 +1,10 @@
 import { generateCards, type Note } from './cards'
 import type { ReviewRecord } from './review'
-export interface MeaningQuestion { cardId: string; noteId: string; word: string; meaning: string; lang: string; rate: number }
+export interface MeaningQuestion { cardId: string; noteId: string; word: string; meaning: string; lang: string; rate: number; partOfSpeech?: string; phonetic?: string; example?: string; exampleTranslation?: string }
 const plain = (value: string) => value.replace(/<[^>]*>/g, '').trim()
 const fieldName = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-export function meaningQuestions(notes: Note[], records: ReviewRecord[]): MeaningQuestion[] {
-  const forgotten = new Map(records.filter(record => record.lastRating === 1).map(record => [record.noteId, record.id]))
+export function meaningQuestions(notes: Note[], records: ReviewRecord[], ratings: readonly number[] = [1]): MeaningQuestion[] {
+  const forgotten = new Map(records.filter(record => ratings.includes(record.lastRating)).map(record => [record.noteId, record.id]))
   return notes.flatMap(note => {
     const cardId = forgotten.get(note.id)
     if (!cardId || !generateCards(note).some(card => card.id === cardId) || note.kind === 'cloze') return []
@@ -18,8 +18,17 @@ export function meaningQuestions(notes: Note[], records: ReviewRecord[]): Meanin
       word = note.values?.[wordField.name] ?? ''
       meaning = note.values?.[meaningField.name] ?? ''
     }
+    const detail = (pattern: RegExp) => {
+      const field = note.template?.fields.find(field => pattern.test(fieldName(field.name)))
+      const value = field ? note.values?.[field.name] : undefined
+      return value ? plain(value) : undefined
+    }
+    const partOfSpeech = detail(/^(loai tu|part of speech|word type|pos)$/)
+    const phonetic = detail(/phien am|phonetic|pronunciation|^ipa$/)
+    const example = detail(/^(cau vi du|vi du|example|example sentence)$/)
+    const exampleTranslation = detail(/^(dich cau vi du|dich vi du|example translation)$/)
     if (!plain(word) || !plain(meaning)) return []
-    return [{ cardId, noteId: note.id, word: plain(word), meaning: plain(meaning), lang: note.template?.speech?.lang ?? 'en-US', rate: note.template?.speech?.rate ?? 1 }]
+    return [{ cardId, noteId: note.id, word: plain(word), meaning: plain(meaning), ...(partOfSpeech ? { partOfSpeech } : {}), ...(phonetic ? { phonetic } : {}), ...(example ? { example } : {}), ...(exampleTranslation ? { exampleTranslation } : {}), lang: note.template?.speech?.lang ?? 'en-US', rate: note.template?.speech?.rate ?? 1 }]
   })
 }
 export function normalizeMeaning(value: string) {

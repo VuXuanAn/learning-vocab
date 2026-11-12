@@ -2,7 +2,7 @@ import { contextualSyncError } from './row-sync-error'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sqlTables, localId, type RowTable, type WireRow, type SyncedRow } from './row-codec'
 const pageSize = 500
-const softDelete = new Set<RowTable>(['folders', 'templates', 'notes'])
+const softDelete = new Set<RowTable>(['folders', 'templates', 'notes', 'grammarFolders', 'grammarEntries'])
 export interface RowTransport {
   load: (table: RowTable, base: SyncedRow[]) => Promise<WireRow[]>
   write: (table: RowTable, id: string, value: WireRow | null, remote?: WireRow) => Promise<WireRow>
@@ -13,6 +13,7 @@ export function createRowTransport(client: SupabaseClient, userId: string): RowT
     const rows: WireRow[] = []
     for (let offset = 0; ; offset += pageSize) {
       let query = client.from(sqlTables[table]).select(columns)
+      if (table === 'grammarFolders' || table === 'grammarEntries') query = query.eq('owner_id', userId)
       if (['templates', 'reviews', 'reviewLogs'].includes(table)) query = query.eq('user_id', userId)
       if (table === 'reviews') query = query.order('note_id').order('card_key')
       else query = query.order('id')
@@ -34,7 +35,8 @@ export function createRowTransport(client: SupabaseClient, userId: string): RowT
       for (let offset = 0; offset < fetchIds.length; offset += 100) {
         for (let page = 0; ; page += pageSize) {
           let query = client.from(sqlTables[table]).select('*').in(table === 'reviews' ? 'note_id' : 'id', fetchIds.slice(offset, offset + 100))
-          if (['templates', 'reviews', 'reviewLogs'].includes(table)) query = query.eq('user_id', userId)
+          if (table === 'grammarFolders' || table === 'grammarEntries') query = query.eq('owner_id', userId)
+      if (['templates', 'reviews', 'reviewLogs'].includes(table)) query = query.eq('user_id', userId)
           if (table === 'reviews') query = query.order('note_id').order('card_key').range(page, page + pageSize - 1)
           const { data, error } = await query
           if (error) throw contextualSyncError(error, sqlTables[table], 'select')
@@ -59,7 +61,7 @@ export function createRowTransport(client: SupabaseClient, userId: string): RowT
       let query
       if (!remote) {
         if (!value) throw new Error('Missing row')
-        const owner = table === 'folders' ? { owner_id: userId } : table === 'notes' ? { created_by: userId } : { user_id: userId }
+        const owner = ['folders', 'grammarFolders', 'grammarEntries'].includes(table) ? { owner_id: userId } : table === 'notes' ? { created_by: userId } : { user_id: userId }
         query = client.from(sqlTables[table]).insert({ id, ...owner, ...value })
       } else {
         query = client.from(sqlTables[table]).update(value ?? { deleted_at: new Date().toISOString() }).eq('id', id).eq('updated_at', remote.updated_at)
