@@ -1,4 +1,4 @@
-﻿import type { Flashcard, Note } from './cards'
+import type { Flashcard, Note } from './cards'
 import { matchesMeaning } from './meaning-quiz'
 export interface TypedTarget { kind: 'word' | 'meaning' | 'cloze'; expected: string }
 const fieldKey=(value:string)=>value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('vi')
@@ -20,8 +20,18 @@ export function typedTarget(note:Note, card:Flashcard, reversed:boolean):TypedTa
  const expectsWord=(card.id===note.id+'-reverse')!==reversed
  return card.back.trim()?{kind:expectsWord?'word':'meaning',expected:card.back.trim()}:null
 }
+// Spelling practice always uses the original word, independently of card direction.
+export function spellingTarget(note:Note):TypedTarget|null {
+ if(note.kind==='cloze')return null
+ if(note.template){
+  const field=note.template.fields.find(field=>/^(tu vung|word|term|vocabulary)$/.test(fieldKey(field.name)))
+  const expected=field?note.values?.[field.name]?.trim():undefined
+  return expected?{kind:'word',expected}:null
+ }
+ return note.front.trim()?{kind:'word',expected:note.front.trim()}:null
+}
 export function normalizeTypedWord(value:string){
- return value.normalize('NFKC').toLocaleLowerCase('en').replace(/[’‘]/g,"'").replace(/[.!?]+$/g,'').replace(/\s+/gu,' ').trim()
+ return value.normalize('NFKC').trim().toLocaleLowerCase('en').replace(/[’‘]/g,"'").replace(/[.!?]+$/g,'').replace(/\s+/gu,' ').trim()
 }
 export function checkTypedAnswer(answer:string,target:TypedTarget){
  if(target.kind==='meaning')return matchesMeaning(answer,target.expected)

@@ -1,21 +1,20 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Search, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { Search, BookOpen, ArrowUp, ArrowDown, CornerDownLeft } from 'lucide-react'
 import { db } from './db'
 import { noteWord } from './related-words'
-import LinkedCardDialog from './LinkedCardDialog'
 import { irregularVerbForms, irregularVerbId, searchIrregularVerbs } from './irregular-verbs'
 
 const plain = (value: string) => value.replace(/<[^>]*>/g, '').trim()
 const normalized = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ').trim()
 
-export default function VocabularyLookup() {
+export default function VocabularyLookup({ onChoose, onClose }: { onChoose: (id: string) => void; onClose: () => void }) {
+ const listId = useId()
  const [query, setQuery] = useState('')
- const [selectedNoteId, setSelectedNoteId] = useState('')
- const portalContainer = useRef<HTMLElement | null>(null)
+ const [active, setActive] = useState(0)
+ const list = useRef<HTMLDivElement>(null)
  const notes = useLiveQuery(() => db.notes.toArray())
- const vocabulary = useMemo(() => (notes ?? []).flatMap(note => {
+ const vocabulary = useMemo(() => [...(notes ?? [])].sort((a,b) => b.createdAt - a.createdAt).flatMap(note => {
   const word = plain(noteWord(note))
   if (!word) return []
   const field = (pattern: RegExp) => {
@@ -33,7 +32,7 @@ export default function VocabularyLookup() {
  const term = normalized(query)
  const referenceMatches = useMemo(() => searchIrregularVerbs(query), [query])
  const matches = useMemo(() => {
-  if (!term) return []
+  if (!term) return vocabulary
   const references = referenceMatches.map(verb => ({id:irregularVerbId(verb), word:verb.base, meaning:`${verb.past} · ${verb.participle}\n${verb.meaning}`, wordKey:verb.base, meaningKey:normalized(verb.meaning)}))
   const exactReferences = new Set(referenceMatches.filter(verb=>irregularVerbForms(verb).includes(term)).map(irregularVerbId))
   return [...vocabulary.filter(row => row.wordKey.includes(term) || row.meaningKey.includes(term)), ...references].sort((a,b) => {
@@ -41,17 +40,23 @@ export default function VocabularyLookup() {
    return (exactReferences.has(a.id)?0:rank(a.wordKey))-(exactReferences.has(b.id)?0:rank(b.wordKey)) || a.word.localeCompare(b.word)
   })
  }, [vocabulary, term, referenceMatches])
- return <section aria-labelledby="vocabulary-lookup-title" className="mb-6 min-w-0 rounded-2xl border border-slate-20 bg-white p-4 shadow-sm">
-  <h2 id="vocabulary-lookup-title" className="flex items-center gap-2 font-semibold text-emerald-800"><Search size={18}/>Tra từ trong kho</h2>
-  <p className="mt-2 text-xs leading-5 text-slate-500">Tra từ đã lưu và động từ bất quy tắc theo cả V1, V2, V3.</p>
-  <div className="relative mt-3"><Input aria-label="Tìm từ vựng trong kho" type="search" autoComplete="off" placeholder="Nhập từ hoặc nghĩa…" value={query} onChange={event=>setQuery(event.target.value)} className="pr-9"/>{query&&<button type="button" onClick={()=>setQuery('')} aria-label="Xóa tìm kiếm" className="absolute right-1 top-1 flex size-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"><X size={15}/></button>}</div>
-  <p role="status" className="mt-3 text-xs leading-5 text-slate-500">{!notes?'Đang tải kho từ…':!term?'Tìm theo từ tiếng Anh hoặc nghĩa tiếng Việt.':matches.length?`${matches.length} kết quả trong kho từ vựng`:'Chưa tìm thấy từ này trong kho trên thiết bị. Đồng bộ để cập nhật dữ liệu mới nhất.'}</p>
-  {!!term&&!!matches.length&&<div key={term} className="mt-3 max-h-[40dvh] space-y-2 overflow-y-auto overscroll-contain pr-1">
-   {matches.slice(0,2).map(row=><button key={row.id} type="button" aria-haspopup="dialog" onClick={()=>setSelectedNoteId(row.id)} className="block w-full rounded-xl border border-slate-100 bg-slate-50/70 p-3 text-left transition-colors hover:border-emerald-20 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600">
-    <span className="break-words text-sm font-semibold text-emerald-900">{row.word}</span><span className="ml-2 text-[10px] font-medium text-emerald-700">{row.id.startsWith('irregular:')?'Bất quy tắc':'Đã lưu'}</span><span className="mt-1 block whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">{row.meaning}</span>
-   </button>)}
-   {matches.length>2&&<p className="px-1 text-xs leading-5 text-slate-500">Hiển thị 2 kết quả đầu. Nhập thêm để thu hẹp tìm kiếm.</p>}
-  </div>}
-  <LinkedCardDialog portalContainer={portalContainer} selectedNoteId={selectedNoteId} onClose={()=>setSelectedNoteId('')}/>
- </section>
+ const visible = matches.slice(0,50)
+ const index = Math.min(active, Math.max(0,visible.length-1))
+ useEffect(() => { list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({block:'nearest'}) }, [index,query])
+ return <>
+  <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 px-4 py-3"><Search size={20} className="shrink-0 text-emerald-700"/>
+   <input autoFocus role="combobox" aria-label="Tra từ trong kho" aria-autocomplete="list" aria-expanded={true} aria-controls={listId} aria-activedescendant={visible.length?listId+'-'+index:undefined} autoComplete="off" className="min-w-0 flex-1 border-0 bg-transparent p-1 text-sm outline-none" placeholder="Tìm từ vựng hoặc nghĩa tiếng Việt…" value={query} onChange={event=>{setQuery(event.target.value);setActive(0)}} onKeyDown={event=>{
+    if(event.nativeEvent.isComposing)return
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();if(visible.length)setActive((index+(event.key==='ArrowDown'?1:-1)+visible.length)%visible.length)}
+    if(event.key==='Enter'){event.preventDefault();if(visible[index])onChoose(visible[index].id)}
+   }}/><button type="button" onClick={onClose} aria-label="Đóng tìm kiếm" className="rounded border border-slate-200 px-2 py-1 text-xs text-slate-500 hover:bg-slate-100">Esc</button>
+  </div>
+  <div className="flex shrink-0 justify-between px-4 py-2 text-xs text-slate-500"><span>{term?'Kết quả tìm kiếm':'Từ vựng đã lưu gần đây'}</span><span role="status" aria-live="polite">{matches.length} từ vựng</span></div>
+  <div ref={list} id={listId} role="listbox" aria-label="Kết quả từ vựng" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
+   {!notes?<p role="status" className="p-8 text-center text-sm text-slate-500">Đang tải kho từ…</p>:!visible.length?<p role="status" className="p-8 text-center text-sm text-slate-500">{term?'Không tìm thấy từ vựng phù hợp.':'Chưa có từ vựng trong kho.'}</p>:visible.map((row,i)=><div key={row.id} id={listId+'-'+i} role="option" aria-selected={index===i} onMouseMove={()=>setActive(i)} onMouseDown={event=>event.preventDefault()} onClick={()=>onChoose(row.id)} className={'flex cursor-pointer gap-3 rounded-lg px-3 py-3 '+(index===i?'bg-emerald-700 text-white':'text-slate-700 hover:bg-slate-50')}>
+    <BookOpen size={18} className="mt-0.5 shrink-0"/><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{row.word}</p><p className={'mt-1 truncate text-xs '+(index===i?'text-emerald-100':'text-slate-400')}>{row.id.startsWith('irregular:')?'Bất quy tắc · ':''}{row.meaning}</p></div>{index===i&&<CornerDownLeft size={16} className="mt-1 shrink-0"/>}
+   </div>)}
+  </div>
+  <div className="flex shrink-0 flex-wrap items-center gap-4 border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500"><span className="flex items-center gap-1"><ArrowUp size={12}/><ArrowDown size={12}/>Chọn</span><span>Enter · Xem từ vựng</span><span>Esc · Đóng</span>{matches.length>50&&<span>Hiển thị 50 kết quả, nhập thêm để thu hẹp.</span>}</div>
+ </>
 }

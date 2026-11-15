@@ -16,7 +16,7 @@ const orderUrl=url(readFileSync('src/lib/grammar-order.ts','utf8'))
 const documentUrl=url(readFileSync('src/lib/grammar-document.ts','utf8'))
 const htmlUrl=url(readFileSync('src/lib/grammar-html.ts','utf8').replace("import DOMPurify from 'dompurify'",'const DOMPurify=globalThis.__grammarPurify').replace("'./grammar-document'",JSON.stringify(documentUrl)))
 const {grammarEntryHtml,grammarHtmlText,prepareGrammarHtml}=await import(htmlUrl)
-const {saveGrammarEntry,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder,moveGrammarItem}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-html'",JSON.stringify(htmlUrl)).replace("'./grammar-order'",JSON.stringify(orderUrl)).replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
+const {saveGrammarEntry,removeGrammarHighlight,deleteGrammarEntry,saveGrammarFolder,deleteGrammarFolder,moveGrammarItem}=await import(url(readFileSync('src/lib/grammar-storage.ts','utf8').replace("'./grammar-html'",JSON.stringify(htmlUrl)).replace("'./grammar-order'",JSON.stringify(orderUrl)).replace("'./grammar-document'",JSON.stringify(documentUrl)).replace("'./db'",JSON.stringify(dbUrl)).replace("'zod'",JSON.stringify(import.meta.resolve('zod')))))
 const now=()=>new Date().toISOString()
 const folderRow=(ownerId='owner')=>({id:crypto.randomUUID(),ownerId,name:'Grammar',nameKey:'grammar',createdAt:now(),updatedAt:now()})
 const entryRow=folder=>({id:crypto.randomUUID(),ownerId:folder.ownerId,folderId:folder.id,title:'My grammar',topic:'',structure:'S + V',usage:'Cách dùng',example:'An example.',translation:'Ví dụ.',notes:'My notes',status:'review',createdAt:now(),updatedAt:now()})
@@ -384,5 +384,54 @@ test('Grammar without a structure field saves and legacy summary data migrates w
   const restored=decodeRow('grammarEntries',{id:legacy.id,owner_id:legacy.ownerId,folder_id:legacy.folderId,data:legacy})
   assert.equal(Object.hasOwn(restored,'structure'),false)
   assert.equal(restored.source.pattern,'free … from')
+ }finally{await db.delete()}
+})
+
+test('Grammar sources support Shadowing and other pages while checking lesson ownership and stale text',async()=>{
+ const db=new VocabDatabase('grammar-global-sources-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const lesson={id:crypto.randomUUID(),ownerId:folder.ownerId,folderId:crypto.randomUUID(),title:'Practice',referenceText:'They freed us from fear.',createdAt:now(),updatedAt:now()}
+  await db.shadowingLessons.put(lesson)
+  const source={sourceKind:'shadowing',sourcePath:'/speaking/lessons/'+lesson.id,articleId:lesson.id,articleTitle:lesson.title,contentHtml:'<p>'+lesson.referenceText+'</p>',quote:'freed',start:6,end:11,exactSelection:true,highlights:[{start:6,end:11}]}
+  const saved=await saveGrammarEntry({...entryRow(folder),source},db)
+  assert.equal(saved.source.sourceKind,'shadowing')
+  const {encodeRow,decodeRow}=await import(url(readFileSync('src/lib/row-codec.ts','utf8')))
+  const wire=encodeRow('grammarEntries',saved)
+  const restored=decodeRow('grammarEntries',{id:saved.id,owner_id:saved.ownerId,folder_id:saved.folderId,...wire})
+  assert.equal(restored.source.sourceKind,'shadowing')
+  assert.equal(restored.source.sourcePath,source.sourcePath)
+  await assert.rejects(()=>saveGrammarEntry({...entryRow(folder),source:{...source,contentHtml:'<p>Old text</p>'}},db),/shadowing đã thay đổi/)
+  await db.shadowingLessons.update(lesson.id,{ownerId:'other'})
+  await assert.rejects(()=>saveGrammarEntry({...entryRow(folder),source},db),/shadowing đã thay đổi/)
+  const pageSource={...source,sourceKind:'page',sourcePath:'/review',articleId:crypto.randomUUID(),contentHtml:'freed',quote:'freed',start:0,end:5,highlights:[{start:0,end:5}]}
+  const page=await saveGrammarEntry({...entryRow(folder),source:pageSource},db)
+  assert.equal(page.source.sourcePath,'/review')
+  await assert.rejects(()=>saveGrammarEntry({...entryRow(folder),source:{...pageSource,sourcePath:'https://example.com'}},db))
+  await assert.rejects(()=>saveGrammarEntry({...entryRow(folder),source:{...pageSource,sourcePath:undefined}},db),/đường dẫn/)
+ }finally{await db.delete()}
+})
+
+
+test('Removing one grammar highlight retains the card, other occurrences and concurrent edits',async()=>{
+ const db=new VocabDatabase('grammar-unhighlight-'+crypto.randomUUID())
+ try{
+  const folder=await saveGrammarFolder(folderRow(),db)
+  const makeSource=word=>({sourceKind:'page',sourcePath:'/review',articleId:crypto.randomUUID(),articleTitle:'Review',contentHtml:word,quote:word,start:0,end:word.length,highlights:[{start:0,end:word.length}]})
+  const primary=makeSource('freed'),secondary=makeSource('from')
+  const saved=await saveGrammarEntry({...entryRow(folder),source:primary,sources:[secondary]},db)
+  await assert.rejects(()=>removeGrammarHighlight(saved.id,'other',primary,db),/quyền/)
+  await db.grammarEntries.update(saved.id,{notes:'A more recent edit'})
+  assert.equal(await removeGrammarHighlight(saved.id,folder.ownerId,primary,db),true)
+  const detached=await db.grammarEntries.get(saved.id)
+  assert.equal(detached.source,undefined)
+  assert.equal(detached.notes,'A more recent edit')
+  assert.deepEqual(detached.sources,saved.sources)
+  assert.equal(await removeGrammarHighlight(saved.id,folder.ownerId,primary,db),false)
+  const reassigned=await saveGrammarEntry({...detached,source:primary},db)
+  assert.equal(reassigned.source.quote,'freed')
+  assert.equal(await removeGrammarHighlight(saved.id,folder.ownerId,secondary,db),true)
+  assert.equal((await db.grammarEntries.get(saved.id)).source.quote,'freed')
+  assert.deepEqual((await db.grammarEntries.get(saved.id)).sources,[])
  }finally{await db.delete()}
 })

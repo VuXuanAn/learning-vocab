@@ -29,8 +29,9 @@ function indexReadingRoot(root:HTMLElement,rendered=false){
 }
 const wordChar=(value:string)=>/[\p{L}\p{N}\p{M}_]/u.test(value)
 const escape=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
-export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortSignal,previous?:{html:string;matches:ReadingMatch[]}){
+export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortSignal,previous?:{html:string;matches:ReadingMatch[]},ignoredRanges:{start:number;end:number}[]=[]){
  const clean=cleanReadingHtml(html),{text}=readingDocument(clean)
+ const ignored=(start:number,end:number)=>ignoredRanges.some(range=>start<range.end&&end>range.start)
  const groups=new Map<string,{word:string;noteId:string;pattern:RegExp}[]>(),seen=new Set<string>()
  for(const note of [...notes].sort((a,b)=>a.id.localeCompare(b.id)))for(const word of readingSearchWords(noteWord(note))){
   const key=word.toLowerCase()
@@ -54,14 +55,14 @@ export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortS
    entry.pattern.lastIndex=start;const match=entry.pattern.exec(text)
    if(!match)continue
    const end=start+match[0].length
-   if(end<text.length&&wordChar(text[end]))continue
+   if(end<text.length&&wordChar(text[end])||ignored(start,end))continue
    matches.push({start,end,noteId:entry.noteId,word:entry.word,context:text.slice(Math.max(0,start-100),Math.min(text.length,end+140)).replace(/\s+/gu,' ').trim()});if(matches.length>20000)throw new Error('Bài đọc có quá nhiều vị trí từ vựng (tối đa 20.000). Hãy chia bài đọc thành các phần nhỏ hơn.');start=end-1;break
   }
  }
  // Keep prior user confirmations while the source and linked cards still exist.
  const validIds=new Set(notes.map(note=>note.id))
  if(previous?.html===clean)for(const match of previous.matches){
-  if(match.confirmed&&validIds.has(match.noteId)&&!matches.some(exact=>match.start<exact.end&&match.end>exact.start))matches.push(match)
+  if(match.confirmed&&validIds.has(match.noteId)&&!ignored(match.start,match.end)&&!matches.some(exact=>match.start<exact.end&&match.end>exact.start))matches.push(match)
  }
  matches.sort((a,b)=>a.start-b.start)
  const similar=createReadingSimilarity(notes.flatMap(note=>readingSearchWords(noteWord(note)).filter(word=>seen.has(word.toLowerCase())).map(word=>({noteId:note.id,word,meaning:(note.values?.['Nghĩa tiếng Việt']||note.back||'').slice(0,400)}))))
@@ -70,6 +71,7 @@ export async function detectReadingVocab(html:string,notes:Note[],signal?:AbortS
  for(const token of text.matchAll(/[A-Za-z]+(?:['’][A-Za-z]+)?/g)){
   if(index++%50===0){await new Promise(resolve=>setTimeout(resolve,0));if(signal?.aborted)throw new Error('Đã dừng dò từ vựng.')}
   const start=token.index,end=start+token[0].length
+  if(ignored(start,end))continue
   while(cursor<matches.length&&matches[cursor].end<=start)cursor++
   if(cursor<matches.length&&matches[cursor].start<end)continue
   // Avoid fragments inside digits, identifiers or hyphenated words.
@@ -98,7 +100,7 @@ export function renderReadingHtml(html:string,detection:{html:string;matches:Rea
    fragment.append(document.createTextNode(value.slice(cursor,start)))
    // Old/confirmed detections can store a card label rather than the surface form.
    const irregular=!!findIrregularVerb(match.noteId)||isIrregularVerbForm(text.slice(match.start,match.end))
-   const link=document.createElement('a');link.href='?note='+encodeURIComponent(match.noteId);link.dataset.readingNote=match.noteId;link.textContent=value.slice(start,end);link.title=(irregular?'Động từ bất quy tắc: ':'Mở thẻ: ')+match.word;link.className='reading-vocab-link'+(irregular?' reading-irregular-link':'');fragment.append(link);cursor=end
+   const link=document.createElement('a');link.href='?note='+encodeURIComponent(match.noteId);link.dataset.readingNote=match.noteId;link.dataset.readingStart=String(match.start);link.dataset.readingEnd=String(match.end);link.dataset.readingWord=text.slice(match.start,match.end);link.textContent=value.slice(start,end);link.title=(irregular?'Động từ bất quy tắc: ':'Mở thẻ: ')+match.word;link.className='reading-vocab-link'+(irregular?' reading-irregular-link':'');fragment.append(link);cursor=end
   }
   if(cursor){fragment.append(document.createTextNode(value.slice(cursor)));span.node.replaceWith(fragment)}
  }
@@ -128,8 +130,8 @@ export function readingSelection(html:string,root:HTMLElement,range:Range){
 export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,entries:GrammarEntry[],articleId?:string){
  const root=document.createElement('div');root.innerHTML=renderedHtml
  const {text,spans}=indexReadingRoot(root,true)
- const valid=entries.flatMap(entry=>[...(entry.source?[entry.source]:[]),...(entry.sources??[])].map(source=>({...entry,source}))).filter(entry=>(!articleId||entry.source.articleId===articleId)&&entry.source?.contentHtml===sourceHtml&&text.slice(entry.source.start,entry.source.end)===entry.source.quote)
- const ranges=valid.flatMap(entry=>grammarHighlightRanges(entry.source!,entry.source.pattern??entry.structure??'').map(range=>({...range,id:entry.id,title:entry.title??entry.structure??'Ngữ pháp'})))
+ const valid=entries.flatMap(entry=>[...(entry.source?[entry.source]:[]),...(entry.sources??[])].map((source,sourceIndex)=>({...entry,source,sourceIndex}))).filter(entry=>(!articleId||entry.source.articleId===articleId)&&entry.source?.contentHtml===sourceHtml&&text.slice(entry.source.start,entry.source.end)===entry.source.quote)
+ const ranges=valid.flatMap(entry=>grammarHighlightRanges(entry.source!,entry.source.pattern??entry.structure??'').map(range=>({...range,id:entry.id,sourceIndex:entry.sourceIndex,title:entry.title??entry.structure??'Ngữ pháp'})))
  for(const span of spans){
   const relevant=ranges.filter(range=>range.start<span.end&&range.end>span.start)
   if(!relevant.length)continue
@@ -138,7 +140,7 @@ export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,en
   for(let i=0;i<boundaries.length-1;i++){
    const from=boundaries[i],to=boundaries[i+1],range=relevant.find(range=>range.start<=span.start+from&&range.end>=span.start+to)
    const node=document.createTextNode(value.slice(from,to))
-   if(range){const mark=document.createElement('mark');mark.dataset.readingGrammar=range.id;mark.title=range.title;mark.className='reading-grammar-highlight';mark.append(node);fragment.append(mark)}else fragment.append(node)
+   if(range){const mark=document.createElement('mark');mark.dataset.readingGrammar=range.id;mark.dataset.grammarSourceIndex=String(range.sourceIndex);mark.title=range.title;mark.className='reading-grammar-highlight';mark.append(node);fragment.append(mark)}else fragment.append(node)
   }
   span.node.replaceWith(fragment)
  }
@@ -181,8 +183,53 @@ export function highlightReadingGrammar(renderedHtml:string,sourceHtml:string,en
   for(const anchor of contents.querySelectorAll('a'))anchor.replaceWith(...anchor.childNodes)
   const link=document.createElement('a')
   link.href='/grammar?folder='+encodeURIComponent(phrase.entry.folderId)+'&grammar='+encodeURIComponent(phrase.entry.id)
-  link.dataset.readingGrammar=phrase.entry.id;link.title=phrase.entry.title??phrase.entry.structure??'Ngữ pháp';link.className='reading-grammar-link'
+  link.dataset.readingGrammar=phrase.entry.id;link.dataset.grammarSourceIndex=String(phrase.entry.sourceIndex);link.title=phrase.entry.title??phrase.entry.structure??'Ngữ pháp';link.className='reading-grammar-link'
   link.append(contents);range.insertNode(link)
  }
  return root.innerHTML
+}
+
+// Resolve stored source offsets without changing React-owned DOM nodes.
+export function readingRange(html:string,root:HTMLElement,start:number,end:number){
+ const indexed=indexReadingRoot(root,true),original=readingDocument(html)
+ if(indexed.text!==original.text||end<=start)return null
+ const first=indexed.spans.find(span=>span.end>start&&span.start<end)
+ const last=indexed.spans.findLast(span=>span.start<end&&span.end>start)
+ if(!first||!last)return null
+ const range=document.createRange()
+ range.setStart(first.node,Math.max(0,start-first.start))
+ range.setEnd(last.node,Math.min(last.node.length,end-last.start))
+ return range
+}
+
+export function readingGrammarExclusions(sourceHtml:string,entries:GrammarEntry[],articleId:string){
+ const {text}=readingDocument(sourceHtml)
+ return entries.flatMap(entry=>[...(entry.source?[entry.source]:[]),...(entry.sources??[])].flatMap(source=>{
+  if(source.articleId!==articleId||source.contentHtml!==sourceHtml||text.slice(source.start,source.end)!==source.quote)return []
+  const ranges=grammarHighlightRanges(source,source.pattern??entry.structure??'')
+  if(!ranges.length)return []
+  return [{start:Math.min(...ranges.map(range=>range.start)),end:Math.max(...ranges.map(range=>range.end))}]
+ }))
+}
+
+// Read-only excerpts for a source preview; no links can navigate away from study.
+export function readingSourcePassages(html:string,detection:{html:string;matches:ReadingMatch[]}|undefined,noteId:string){
+ const root=document.createElement('div')
+ root.innerHTML=renderReadingHtml(html,detection,new Set([noteId]))
+ const blocks=new Set<Element>()
+ for(const link of root.querySelectorAll('[data-reading-note]')){
+  if(link.getAttribute('data-reading-note')!==noteId)continue
+  blocks.add(link.closest('p,li,blockquote,td,th,h1,h2,h3,h4,h5,h6,div')??root)
+ }
+ // A phrase crossing adjacent blocks can produce multiple highlighted fragments.
+ const passages=[...blocks].filter(block=>![...blocks].some(parent=>parent!==block&&parent.contains(block)))
+ return passages.map(block=>{
+  const copy=block.cloneNode(true) as HTMLElement
+  for(const link of copy.querySelectorAll('a')){
+   if(link.getAttribute('data-reading-note')===noteId){
+    const mark=document.createElement('mark');mark.className='rounded bg-emerald-200 px-0.5 text-emerald-950';mark.textContent=link.textContent;link.replaceWith(mark)
+   }else link.replaceWith(...link.childNodes)
+  }
+  return copy.innerHTML
+ })
 }

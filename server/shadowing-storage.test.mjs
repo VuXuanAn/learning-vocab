@@ -74,3 +74,24 @@ test('editing lesson text clears detection and preserves original recording text
   assert.equal((await db.speakingRecordings.get('take')).referenceText,'Hello world.')
  }finally{await db.delete()}
 })
+
+
+test('cloud JSON key ordering does not invalidate an open shadowing confirmation',async()=>{
+ const db=new VocabDatabase('shadowing-json-order-'+crypto.randomUUID())
+ try{
+  const folder=await saveShadowingFolder('a','Work',undefined,db)
+  const lesson=await saveShadowingLesson({id:'lesson',ownerId:'a',folderId:folder.id,title:'Sunday',referenceText:'They come on Sundays.',createdAt:'2026-01-01',updatedAt:'2026-01-01'},db)
+  await db.notes.put({id:'sunday',kind:'basic',front:'Sunday',back:'Chủ Nhật',createdAt:0})
+  const detection={html:shadowingHtml(lesson.referenceText),matches:[{start:6,end:10,noteId:'irregular:come',word:'come',context:'They come on Sundays.'}],createdAt:'2026-01-02',suggestions:[{word:'Sundays'}]}
+  const saved=await saveShadowingLesson({...lesson,detection},db)
+  const reorder=value=>Array.isArray(value)?value.map(reorder):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).reverse().map(([key,value])=>[key,reorder(value)])):value
+  const cloud=reorder(saved.detection)
+  assert.notEqual(JSON.stringify(cloud),JSON.stringify(saved.detection))
+  await db.shadowingLessons.update(lesson.id,{detection:cloud,metadataSynced:true})
+  const confirmed=await confirmShadowingMatches(lesson.id,'a',saved.detection,[{start:14,end:21,noteId:'sunday',word:'Sunday'}],db)
+  assert.equal(confirmed.detection.matches.length,2)
+  assert.equal(confirmed.detection.matches[1].confirmed,true)
+  assert.equal(confirmed.metadataSynced,false)
+  await assert.rejects(()=>confirmShadowingMatches(lesson.id,'a',saved.detection,[],db),/thay đổi/)
+ }finally{await db.delete()}
+})

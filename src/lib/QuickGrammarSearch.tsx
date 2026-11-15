@@ -30,7 +30,7 @@ export default function QuickGrammarSearch() {
  useEffect(()=>{list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({block:'nearest'})},[index,open])
  function choose(id:string){setOpen(false);setSelected(id)}
  return <>
-  <Dialog open={open} onOpenChange={setOpen}><DialogContent portalContainer={portal} showCloseButton={false} className="flex max-h-[75dvh] -translate-y-0 flex-col gap-0 overflow-hidden p-0 top-[12dvh] sm:max-w-2xl">
+  <Dialog open={open} onOpenChange={setOpen}><DialogContent portalContainer={portal} showCloseButton={false} className="flex max-h-[75dvh] -translate-y-0 flex-col gap-0 overflow-hidden p-0 top-[12dvh] sm:w-[80vw] sm:max-w-[80vw]">
    <DialogTitle className="sr-only">Tìm nhanh ngữ pháp</DialogTitle><DialogDescription className="sr-only">Nhập tên, công thức hoặc nội dung. Dùng phím lên xuống để chọn, Enter để xem và Escape để đóng.</DialogDescription>
    <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 px-4 py-3"><Search size={20} className="shrink-0 text-emerald-700"/><input ref={input} autoFocus role="combobox" aria-label="Tìm nhanh ngữ pháp" aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={visible.length?listId+'-'+index:undefined} className="min-w-0 flex-1 border-0 bg-transparent p-1 text-sm outline-none" placeholder="Tìm theo tiêu đề ngữ pháp…" value={query} onChange={event=>{setQuery(event.target.value);setActive(0)}} onKeyDown={event=>{
     if(event.nativeEvent.isComposing)return

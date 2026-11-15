@@ -1,4 +1,6 @@
 export interface GrammarSource {
+ sourceKind?:'reading'|'shadowing'|'page'
+ sourcePath?:string
  pattern?:string
  exactSelection?:boolean
  articleId:string
@@ -51,4 +53,10 @@ export function grammarHighlightRanges(source:GrammarSource,structure=source.pat
   if(keywords.size&&keywords.size<tokens.length)return tokens.filter((_,index)=>keywords.has(index)).map(token=>({start:source.start+token.start,end:source.start+token.end}))
  }
  return source.highlights
+}
+
+export function grammarSourceHref(source:GrammarSource,grammarId:string){
+ if(source.sourceKind==='page')return source.sourcePath??'/grammar'
+ const route=source.sourceKind==='shadowing'?'/speaking/lessons/':'/reading/articles/'
+ return route+encodeURIComponent(source.articleId)+'?sourceGrammar='+encodeURIComponent(grammarId)
 }

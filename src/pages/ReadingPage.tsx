@@ -1,7 +1,4 @@
 import GrammarCardDialog from '../lib/GrammarCardDialog'
-import AssignReadingGrammarDialog from '../lib/AssignReadingGrammarDialog'
-import ReadingGrammarDialog from '../lib/ReadingGrammarDialog'
-import type { GrammarSource } from '../lib/reading-grammar'
 import ReadingMatchReview, { type ReadingMatchReviewData } from '../lib/ReadingMatchReview'
 import ReadingTranslation from '../lib/ReadingTranslation'
 import ReadingColumns from '../lib/ReadingColumns'
@@ -21,8 +18,9 @@ import { useAuth } from '../lib/AuthProvider'
 import { useReadingLibrary } from '../lib/useReadingLibrary'
 import { saveReadingArticle, saveReadingFolder } from '../lib/reading-storage'
 import type { ReadingArticle, ReadingFolder } from '../lib/reading-types'
-import { cleanReadingHtml, detectReadingVocab, renderReadingHtml, readingSelection, highlightReadingGrammar } from '../lib/reading-content'
+import { cleanReadingHtml, detectReadingVocab, readingGrammarExclusions, renderReadingHtml, highlightReadingGrammar } from '../lib/reading-content'
 import LinkedCardDialog from '../lib/LinkedCardDialog'
+import { readingWordChoices, type ReadingWordChoice } from '../lib/reading-word-choices'
 
 export default function ReadingPage(){
  const {session}=useAuth(),ownerId=session?.user.id??''
@@ -34,8 +32,7 @@ export default function ReadingPage(){
  const root=useRef<HTMLElement|null>(null),abort=useRef<AbortController|null>(null)
  const [matchReview,setMatchReview]=useState<ReadingMatchReviewData|null>(null)
  const [grammarCardId,setGrammarCardId]=useState('')
- const [grammarMode,setGrammarMode]=useState<'create'|'assign'>('create')
- const [grammarSource,setGrammarSource]=useState<GrammarSource|null>(null)
+ const [wordChoice,setWordChoice]=useState<{word:string;choices:ReadingWordChoice[]}|null>(null)
  const readingGrammar=useLiveQuery(()=>db.grammarEntries.where('ownerId').equals(ownerId).filter(entry=>entry.source?.articleId===articleId||entry.sources?.some(source=>source.articleId===articleId)===true).toArray(),[ownerId,articleId])
  const [notesHidden,setNotesHidden]=useState(true)
  const [readingPane,setReadingPane]=useState<'content'|'translation'|'notes'>('content')
@@ -45,23 +42,10 @@ export default function ReadingPage(){
  const [deleting,setDeleting]=useState<ReadingArticle|null>(null)
  const [busy,setBusy]=useState(false),[detecting,setDetecting]=useState(false),[error,setError]=useState('')
  useEffect(()=>()=>abort.current?.abort(),[])
- useEffect(()=>{abort.current?.abort();setDetecting(false);setError('');setMatchReview(null);setGrammarSource(null);setGrammarCardId('')},[articleId])
+ useEffect(()=>{abort.current?.abort();setDetecting(false);setError('');setMatchReview(null);setWordChoice(null);setGrammarCardId('')},[articleId])
  const sourceNote=params.get('sourceNote')??''
  const sourceGrammar=params.get('sourceGrammar')??''
  const rendered=useMemo(()=>article?highlightReadingGrammar(renderReadingHtml(article.contentHtml,article.detection,new Set(noteIds??[])),article.contentHtml,readingGrammar??[],article.id):'',[article?.id,article?.contentHtml,article?.detection,noteIds,readingGrammar])
- useEffect(()=>{
-  function selectGrammar(event:Event){
-   const detail=(event as CustomEvent<{articleId:string;range:Range;mode?:'create'|'assign'}>).detail
-   if(!article||detail.articleId!==article.id)return
-   const content=root.current?.querySelector<HTMLElement>('[data-reading-article]')
-   const selected=content?readingSelection(article.contentHtml,content,detail.range):null
-   if(!selected||selected.quote.length>10000){toast.error('Hãy bôi đen đoạn trong Content, tối đa 10.000 ký tự.');return}
-   setGrammarMode(detail.mode??'create')
-   setGrammarSource({...selected,articleId:article.id,articleTitle:article.title,contentHtml:article.contentHtml,highlights:[]})
-  }
-  window.addEventListener('reading:add-grammar',selectGrammar)
-  return()=>window.removeEventListener('reading:add-grammar',selectGrammar)
- },[article])
  useEffect(()=>{
   if(!sourceNote)return
   const frame=requestAnimationFrame(()=>{
@@ -103,8 +87,8 @@ export default function ReadingPage(){
   if(!article||detecting)return
   const captured=article,controller=new AbortController();abort.current=controller;setDetecting(true);setError('')
   try{
-   const notes=await db.notes.toArray()
-   const detection=await detectReadingVocab(captured.contentHtml,notes,controller.signal,captured.detection)
+   const [notes,grammar]=await Promise.all([db.notes.toArray(),db.grammarEntries.where('ownerId').equals(captured.ownerId).toArray()])
+   const detection=await detectReadingVocab(captured.contentHtml,notes,controller.signal,captured.detection,readingGrammarExclusions(captured.contentHtml,grammar,captured.id))
    if(controller.signal.aborted)return
    const current=await db.readingArticles.get(captured.id)
    if(!current||current.deletedAt||current.contentHtml!==captured.contentHtml)throw new Error('Nội dung đã thay đổi; bấm Detect vocab để dò lại.')
@@ -124,7 +108,11 @@ export default function ReadingPage(){
   if(!deleting)return;setBusy(true);setError('')
   try{const current=await db.readingArticles.get(deleting.id);if(current)await saveReadingArticle({...current,deletedAt:new Date().toISOString()});setDeleting(null);sync();navigate('/reading');toast.success('Đã xóa bài đọc. Các thẻ từ vựng vẫn được giữ.')}catch{setError('Không xóa được bài đọc.')}finally{setBusy(false)}
  }
- function openCard(event:React.MouseEvent){
+ function showWordCard(id:string){
+  setWordChoice(null)
+  setParams(previous=>{const next=new URLSearchParams(previous);next.set('note',id);return next})
+ }
+ async function openCard(event:React.MouseEvent){
   const mark=(event.target as Element).closest<HTMLElement>('[data-reading-grammar]')
   if(mark){
    event.preventDefault()
@@ -139,7 +127,16 @@ export default function ReadingPage(){
   // Preserve drag selection over vocabulary links instead of opening a card.
   if(window.getSelection()?.toString().trim())return
   const id=target.dataset.readingNote
-  if(id)setParams(previous=>{const next=new URLSearchParams(previous);next.set('note',id);return next})
+  if(!id)return
+  const word=target.dataset.readingWord??target.textContent??''
+  const capturedId=article?.id
+  try{
+   const notes=await db.notes.toArray()
+   if(root.current?.querySelector<HTMLElement>('[data-reading-article]')?.dataset.readingArticle!==capturedId)return
+   const choices=readingWordChoices(word,notes,id)
+   if(choices.length>1)setWordChoice({word,choices})
+   else showWordCard(choices[0]?.id??id)
+  }catch{toast.error('Chưa tải được các nghĩa của từ. Hãy thử lại.')}
  }
  const matching=library.articles.filter(row=>row.title.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')))
  return <main ref={root} className="workspace-page reading-page gap-4 px-4 py-5 sm:px-6"><div className="flex flex-wrap items-center justify-between gap-4"><div><p className="eyebrow">READING</p><h1 className="mt-2 text-3xl font-bold">{articleId?'Chi tiết bài đọc':'Thư viện bài đọc'}</h1></div><div className="flex flex-wrap gap-2">{articleId?<Link to="/reading" className="secondary">Danh sách bài đọc</Link>:<><Button variant="outline" onClick={()=>showFolder()}><FolderPlus size={16}/>Tạo thư mục</Button><Button onClick={()=>newArticle()}><Plus size={16}/>Thêm bài đọc</Button></>}<Button variant="outline" disabled={library.syncing} onClick={sync}><RefreshCw size={16} className={library.syncing?'animate-spin':''}/>Làm mới</Button></div></div>
@@ -150,9 +147,8 @@ export default function ReadingPage(){
  <Dialog open={!!editor} onOpenChange={open=>{if(!busy&&!open)setEditor(null)}}><DialogContent showCloseButton={!busy} className="flex max-h-[90dvh] flex-col overflow-hidden sm:max-w-5xl"><DialogHeader><DialogTitle>{library.articles.some(row=>row.id===editor?.id)?'Chỉnh sửa bài đọc':'Thêm bài đọc'}</DialogTitle><DialogDescription>Nhập nội dung bài đọc bằng HTML. Bạn có thể thêm ghi chú học tập sau khi mở bài.</DialogDescription></DialogHeader>{editor&&<form className="flex min-h-0 flex-col gap-4" onSubmit={event=>void persistArticle(event)}><div className="min-h-0 space-y-4 overflow-y-auto pr-1"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="reading-title">Tên bài *</Label><Input id="reading-title" autoFocus required maxLength={160} value={editor.title} onChange={event=>setEditor({...editor,title:event.target.value})}/></div><div className="space-y-2"><Label htmlFor="reading-folder">Thư mục *</Label><StyledSelect id="reading-folder" required value={editor.folderId} onChange={event=>setEditor({...editor,folderId:event.target.value})}>{library.folders.map(folder=><option key={folder.id} value={folder.id}>{folder.name}</option>)}</StyledSelect></div></div><div className="space-y-2"><div className="flex items-center justify-between gap-2"><Label htmlFor="reading-html">Content HTML *</Label><Button type="button" variant="outline" size="sm" onClick={()=>setPreview(value=>!value)}>{preview?'Sửa HTML':'Xem trước'}</Button></div>{preview?<div className="reading-content min-h-48 rounded-xl border p-5" dangerouslySetInnerHTML={{__html:cleanReadingHtml(editor.contentHtml)}}/>:<textarea id="reading-html" required maxLength={200000} rows={10} className="font-mono text-sm" placeholder="<h2>Tiêu đề</h2><p>Nội dung bài đọc…</p>" value={editor.contentHtml} onChange={event=>setEditor({...editor,contentHtml:event.target.value,detection:undefined})}/>}</div></div>{error&&<p role="alert" className="text-sm text-red-600">{error}</p>}<div className="flex shrink-0 justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" disabled={busy} onClick={()=>setEditor(null)}>Hủy</Button><Button type="submit" disabled={busy||!editor.title.trim()||!editor.contentHtml.trim()}>Lưu bài đọc</Button></div></form>}</DialogContent></Dialog>
  <Dialog open={!!deleting} onOpenChange={open=>{if(!busy&&!open)setDeleting(null)}}><DialogContent><DialogHeader><DialogTitle>Xóa bài đọc?</DialogTitle><DialogDescription>Xóa “{deleting?.title}” cùng Content, Note và các liên kết đã dò. Các thẻ trong kho từ vựng được giữ nguyên.</DialogDescription></DialogHeader>{error&&<p role="alert" className="text-sm text-red-600">{error}</p>}<div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={()=>setDeleting(null)}>Hủy</Button><Button variant="destructive" disabled={busy} onClick={()=>void remove()}>Xóa bài đọc</Button></div></DialogContent></Dialog>
  {matchReview&&<ReadingMatchReview key={matchReview.articleId+matchReview.detection.createdAt} data={matchReview} onClose={()=>setMatchReview(null)} onSync={library.sync}/>}
- {grammarSource&&grammarMode==='assign'&&<AssignReadingGrammarDialog source={grammarSource} ownerId={ownerId} onClose={()=>setGrammarSource(null)}/>}
- {grammarSource&&grammarMode==='create'&&<ReadingGrammarDialog key={grammarSource.articleId+':'+grammarSource.start+':'+grammarSource.end} source={grammarSource} ownerId={ownerId} onClose={()=>setGrammarSource(null)}/>}
  {grammarCardId&&<GrammarCardDialog key={grammarCardId} id={grammarCardId} ownerId={ownerId} onClose={()=>setGrammarCardId('')} portalContainer={root}/>}
+ <Dialog open={!!wordChoice} onOpenChange={open=>{if(!open)setWordChoice(null)}}><DialogContent portalContainer={root} className="flex max-h-[85dvh] flex-col overflow-hidden sm:max-w-2xl"><DialogHeader className="shrink-0 pr-8"><DialogTitle>Chọn nghĩa của “{wordChoice?.word}”</DialogTitle><DialogDescription>Từ này có nhiều mục trong kho. Chọn loại từ và nghĩa phù hợp với ngữ cảnh để xem.</DialogDescription></DialogHeader><div className="min-h-0 space-y-3 overflow-y-auto">{wordChoice?.choices.map(choice=><button type="button" key={choice.id} onClick={()=>showWordCard(choice.id)} className="block w-full rounded-xl border border-slate-200 p-4 text-left hover:border-emerald-400 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-600"><span className="text-xs font-semibold text-emerald-700">{choice.kind==='irregular'?'Động từ bất quy tắc':'Vocab đã lưu'}{choice.kind==='vocab'&&choice.partOfSpeech?' · '+choice.partOfSpeech:''}</span><span className="mt-1 block break-words font-semibold">{choice.word}</span><span className="mt-2 block whitespace-pre-wrap break-words text-sm text-slate-600">{choice.meaning||'Chưa có nghĩa.'}</span></button>)}</div></DialogContent></Dialog>
  <LinkedCardDialog portalContainer={root}/>
  </main>
 }

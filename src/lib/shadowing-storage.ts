@@ -34,7 +34,13 @@ export async function confirmShadowingMatches(id:string,ownerId:string,base:NonN
  return account.transaction('rw',account.shadowingFolders,account.shadowingLessons,account.speakingRecordings,account.notes,async()=>{
   const current=await account.shadowingLessons.get(id)
   if(!current||current.ownerId!==ownerId)throw new Error('Không có quyền lưu kết quả vào bài học này.')
-  if(!current.detection||JSON.stringify(current.detection)!==JSON.stringify(base))throw new Error('Kết quả dò đã thay đổi. Hãy Detect vocab lại.')
+  // Cloud JSON objects can return with reordered keys; compare detection values.
+  const detection=current.detection
+  const sameMatches=detection?.matches.length===base.matches.length&&detection.matches.every((match,index)=>{
+   const previous=base.matches[index]
+   return match.start===previous.start&&match.end===previous.end&&match.noteId===previous.noteId&&match.word===previous.word&&match.confirmed===previous.confirmed&&match.context===previous.context
+  })
+  if(!detection||detection.html!==base.html||detection.createdAt!==base.createdAt||!sameMatches)throw new Error('Kết quả dò đã thay đổi. Hãy Detect vocab lại.')
   const notes=await account.notes.bulkGet([...new Set(confirmed.map(match=>match.noteId))])
   if(notes.some(note=>!note))throw new Error('Một thẻ đã bị xóa. Hãy dò lại.')
   const matches=[...base.matches,...confirmed.map(match=>({...match,confirmed:true}))].sort((a,b)=>a.start-b.start)

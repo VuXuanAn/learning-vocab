@@ -5,7 +5,7 @@ import {stripTypeScriptTypes} from 'node:module'
 import {JSDOM} from 'jsdom'
 import createDOMPurify from 'dompurify'
 const {window}=new JSDOM('')
-globalThis.document=window.document;globalThis.Element=window.Element;globalThis.__readingPurify=createDOMPurify(window)
+globalThis.HTMLElement=window.HTMLElement;globalThis.document=window.document;globalThis.Element=window.Element;globalThis.__readingPurify=createDOMPurify(window)
 const url=source=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(source)).toString('base64')
 const related=url(readFileSync('src/lib/related-words.ts','utf8'))
 const grammarUrl=url(readFileSync('src/lib/reading-grammar.ts','utf8'))
@@ -14,7 +14,7 @@ const ipaUrl=url(readFileSync('src/lib/irregular-ipa.ts','utf8'))
 const irregularUrl=url(readFileSync('src/lib/irregular-verbs.ts','utf8').replace("'./irregular-ipa'",JSON.stringify(ipaUrl)))
 const source=readFileSync('src/lib/reading-content.ts','utf8').replace("import DOMPurify from 'dompurify'",'const DOMPurify=globalThis.__readingPurify').replace("'./related-words'",JSON.stringify(related)).replace("'./reading-similarity'",JSON.stringify(similarity)).replace("'./reading-grammar'",JSON.stringify(grammarUrl))
 const integratedSource=source.replace("'./irregular-verbs'",JSON.stringify(irregularUrl))
-const {cleanReadingHtml,detectReadingVocab,renderReadingHtml,readingSelection,highlightReadingGrammar}=await import(url(integratedSource))
+const {readingSourcePassages,cleanReadingHtml,detectReadingVocab,renderReadingHtml,readingSelection,highlightReadingGrammar,readingRange,readingGrammarExclusions}=await import(url(integratedSource))
 const note=(id,word)=>({id,kind:'basic',front:word,back:'Meaning',tags:'',createdAt:0,extra:''})
 function root(html){const el=document.createElement('div');el.innerHTML=html;return el}
 test('Reading HTML is sanitized before rendering; scripts, controls, handlers and unsafe URLs cannot survive',()=>{
@@ -295,4 +295,105 @@ test('Reading highlights use source patterns without requiring a grammar structu
  assert.deepEqual([...displayed.querySelectorAll('mark')].map(mark=>mark.textContent),['freed','from'])
  assert.equal(displayed.querySelector('a').title,'Free from')
  assert.equal(displayed.querySelector('a').getAttribute('href'),'/grammar?folder=folder&grammar=grammar')
+})
+
+const {readingWordChoices}=await import(url(readFileSync('src/lib/reading-word-choices.ts','utf8').replace("'./related-words'",JSON.stringify(related)).replace("'./reading-similarity'",JSON.stringify(similarity)).replace("'./irregular-verbs'",JSON.stringify(irregularUrl))))
+test('Ambiguous passage words offer every saved meaning plus the irregular reference without choosing a type',()=>{
+ const noun={...note('catch-noun','catch'),template:{fields:[{id:'pos',name:'Loại từ'},{id:'meaning',name:'Nghĩa tiếng Việt'}]},values:{'Loại từ':'noun','Nghĩa tiếng Việt':'sự bắt; điều khó nhận thấy'}}
+ const adjective={...note('catch-other','catch'),back:'Một nghĩa khác'}
+ const choices=readingWordChoices('Catch',[noun,adjective],'irregular:catch')
+ assert.deepEqual(choices.map(row=>row.id),['catch-noun','catch-other','irregular:catch'])
+ assert.equal(choices[0].partOfSpeech,'noun')
+ assert.equal(choices[0].meaning,'sự bắt; điều khó nhận thấy')
+ assert.equal(choices[2].kind,'irregular')
+ assert.match(choices[2].word,/catch.*caught/)
+ assert.deepEqual(readingWordChoices('caught',[noun]).map(row=>row.id),['irregular:catch'])
+ assert.deepEqual(readingWordChoices('cat',[note('cat','cat')]).map(row=>row.id),['cat'])
+ assert.deepEqual(readingWordChoices('nonexistent',[]),[])
+})
+test('All exact irregular entries remain available and manually linked vocabulary is retained',()=>{
+ const choices=readingWordChoices('lay',[note('lie-noun','lie')],'lie-noun')
+ assert.deepEqual(choices.map(row=>row.id),['lie-noun','irregular:lay','irregular:lie'])
+})
+test('Split inline links carry the whole surface word for choosing its meaning',async()=>{
+ const html='<p>ca<strong>tch</strong></p>'
+ const detection=await detectReadingVocab(html,[])
+ const links=root(renderReadingHtml(html,detection,new Set())).querySelectorAll('[data-reading-note]')
+ assert.equal(links.length,2)
+ for(const link of links)assert.equal(link.dataset.readingWord,'catch')
+})
+
+const {grammarSelectionRoot,grammarSelectionSource}=await import(url(readFileSync('src/lib/grammar-selection.ts','utf8').replace("'./reading-content'",JSON.stringify(url(integratedSource)))))
+test('Shared grammar selection captures a single Shadowing word and restores its highlight range',()=>{
+ const content=root('<p>They <strong>freed</strong> us from fear.</p>')
+ content.dataset.shadowingLesson='lesson'
+ const range=document.createRange();range.selectNodeContents(content.querySelector('strong'))
+ assert.equal(grammarSelectionRoot(range),content)
+ const source=grammarSelectionSource(content,range,{kind:'shadowing',id:'lesson',title:'Practice',html:'<p>They <strong>freed</strong> us from fear.</p>',path:'/speaking/lessons/lesson'})
+ assert.equal(source.quote,'freed')
+ assert.equal(source.start,6)
+ const selectedEntry={id:'grammar',title:'Free from',source:{...source,exactSelection:true,highlights:[{start:source.start,end:source.end}]}}
+ const html=highlightReadingGrammar(content.innerHTML,source.contentHtml,[selectedEntry],'lesson')
+ const displayed=root(html)
+ assert.equal(displayed.querySelector('[data-reading-grammar="grammar"]').textContent,'freed')
+})
+test('Generic selections persist page snapshots, stable ids and literal offsets across inline markup',()=>{
+ const content=root('<p>A <strong>useful</strong> word.</p>')
+ const range=document.createRange();range.selectNodeContents(content.querySelector('strong'))
+ const block=grammarSelectionRoot(range)
+ const options={kind:'page',path:'/review',title:'Review'}
+ const source=grammarSelectionSource(block,range,options)
+ assert.equal(source.sourceKind,'page')
+ assert.equal(source.quote,'useful')
+ assert.equal(source.start,2)
+ assert.match(source.articleId,/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-8[\da-f]{3}-[\da-f]{12}$/)
+ assert.equal(grammarSelectionSource(block,range,options).articleId,source.articleId)
+ assert.equal(readingRange(source.contentHtml,block,source.start,source.end).toString(),'useful')
+})
+
+
+test('Detect ignores grammar spans for exact references, overlapping vocab, fuzzy suggestions and prior confirmations',async()=>{
+ const html='<p>They freed Pinpointing from fear. Pinpointing and freed.</p>'
+ const text='\nThey freed Pinpointing from fear. Pinpointing and freed.\n'
+ const start=text.indexOf('freed'),end=text.indexOf(' fear')
+ const source={articleId:'article',articleTitle:'Practice',contentHtml:html,quote:text.slice(start,end),start,end,highlights:[{start,end:start+5},{start:end-4,end}]}
+ const entry={id:'grammar',title:'Free from',source}
+ const ignored=readingGrammarExclusions(html,[entry],'article')
+ assert.deepEqual(ignored,[{start,end}])
+ assert.deepEqual(readingGrammarExclusions(html,[entry],'other'),[])
+ assert.deepEqual(readingGrammarExclusions(html+'changed',[entry],'article'),[])
+ const inside=text.indexOf('Pinpointing')
+ const previous={html,matches:[{start:inside,end:inside+11,noteId:'pin',word:'pinpoint',confirmed:true}]}
+ const notes=[note('pin','pinpoint'),note('freed','freed'),note('fear','fear'),note('phrase','freed Pinpointing from fear')]
+ const detected=await detectReadingVocab(html,notes,undefined,previous,ignored)
+ assert.ok(detected.matches.every(match=>match.start>=end))
+ assert.ok(detected.matches.some(match=>match.word==='freed'))
+ assert.ok(!detected.matches.some(match=>match.noteId==='phrase'))
+ const suggestion=detected.suggestions.find(row=>row.word==='Pinpointing')
+ assert.equal(suggestion.occurrences.length,1)
+ assert.equal(suggestion.occurrences[0].start,text.lastIndexOf('Pinpointing'))
+ const displayed=root(highlightReadingGrammar(renderReadingHtml(html,detected,new Set(notes.map(row=>row.id))),html,[entry],'article'))
+ assert.equal(displayed.querySelector('[data-reading-grammar="grammar"]').dataset.grammarSourceIndex,'0')
+ assert.equal(displayed.querySelector('[data-reading-grammar] [data-reading-note]'),null)
+})
+
+
+test('Grammar exclusions also suppress irregular verb references while leaving later occurrences detectable',async()=>{
+ const html='<p>have been have been</p>'
+ const detected=await detectReadingVocab(html,[],undefined,undefined,[{start:1,end:10}])
+ assert.deepEqual(detected.matches.map(match=>[match.noteId,match.start]),[['irregular:have',11],['irregular:be',16]])
+})
+
+test('source preview returns only matching paragraphs, highlights the word and removes navigation',async()=>{
+ const html='<p>Unrelated introduction.</p><p>A <strong>catchy</strong> song. <a href="/reading/articles/other">Another lesson</a></p><p>Another catchy title.</p><p>Unrelated ending.</p>'
+ const detection=await detectReadingVocab(html,[note('catchy-note','catchy')])
+ const passages=readingSourcePassages(html,detection,'catchy-note')
+ assert.equal(passages.length,2)
+ const preview=root(passages.join(''))
+ assert.equal(preview.querySelectorAll('mark').length,2)
+ assert.equal(preview.querySelector('a'),null)
+ assert.equal(preview.textContent.includes('Unrelated'),false)
+ assert.equal(preview.textContent.includes('Another lesson'),true)
+ assert.deepEqual(readingSourcePassages(html+'changed',detection,'catchy-note'),[])
+ assert.deepEqual(readingSourcePassages(html,detection,'missing-note'),[])
 })

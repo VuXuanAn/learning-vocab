@@ -1,10 +1,11 @@
 import { prepareGrammarHtml, grammarHtmlText, grammarHtmlLimit } from './grammar-html'
 import { z } from 'zod'
 import { db, type VocabDatabase } from './db'
+import type { GrammarSource } from './reading-grammar'
 import type { GrammarEntry, GrammarFolder } from './grammar-types'
 import { cleanGrammarDocument, withoutLegacyStructure } from './grammar-document'
 import { sortGrammarItems } from './grammar-order'
-const sourceSchema=z.object({pattern:z.string().max(153030).optional(),exactSelection:z.boolean().optional(),articleId:z.string().uuid(),articleTitle:z.string().max(160),contentHtml:z.string().max(200000),quote:z.string().min(1).max(10000),start:z.number().int().min(0),end:z.number().int().min(1),highlights:z.array(z.object({start:z.number().int().min(0),end:z.number().int().min(1)})).min(1).max(10000)})
+const sourceSchema=z.object({sourceKind:z.enum(['reading','shadowing','page']).optional(),sourcePath:z.string().max(2000).regex(/^\/(?!\/)/).optional(),pattern:z.string().max(153030).optional(),exactSelection:z.boolean().optional(),articleId:z.string().uuid(),articleTitle:z.string().max(160),contentHtml:z.string().max(200000),quote:z.string().min(1).max(10000),start:z.number().int().min(0),end:z.number().int().min(1),highlights:z.array(z.object({start:z.number().int().min(0),end:z.number().int().min(1)})).min(1).max(10000)})
 const schema=z.object({source:sourceSchema.optional(),sources:z.array(sourceSchema).max(1000).optional(),id:z.string().uuid(),ownerId:z.string().min(1),folderId:z.string().uuid(),title:z.string().trim().min(1).max(160),topic:z.string().trim().max(100),usage:z.string().trim().max(20000),example:z.string().trim().max(10000),translation:z.string().trim().max(10000),notes:z.string().trim().max(20000),createdAt:z.string(),updatedAt:z.string()})
 export async function saveGrammarEntry(row:GrammarEntry,account:VocabDatabase=db){
  const structuredSchema=schema.extend({
@@ -30,15 +31,23 @@ export async function saveGrammarEntry(row:GrammarEntry,account:VocabDatabase=db
  if(!result.success)throw new Error(result.error.issues.map(issue=>issue.message).join(' '))
  const parsed=result.data
  for(const rows of [parsed.structures,parsed.usages,parsed.examples])if(rows&&new Set(rows.map(row=>row.id)).size!==rows.length)throw new Error('ID trong mỗi danh sách phải khác nhau.')
- return account.transaction('rw',account.grammarEntries,account.grammarFolders,account.readingArticles,async()=>{
+ return account.transaction('rw',account.grammarEntries,account.grammarFolders,account.readingArticles,account.shadowingLessons,async()=>{
   const folder=await account.grammarFolders.get(parsed.folderId)
   if(!folder||folder.ownerId!==parsed.ownerId)throw new Error('Hãy chọn thư mục Grammar của bạn.')
   const previous=await account.grammarEntries.get(parsed.id)
   const previousSources=[...(previous?.source?[previous.source]:[]),...(previous?.sources??[])]
   for(const source of [...(parsed.source?[parsed.source]:[]),...(parsed.sources??[])]){
    if(previousSources.some(saved=>JSON.stringify({...saved,pattern:undefined})===JSON.stringify({...source,pattern:undefined})))continue
-   const article=await account.readingArticles.get(source.articleId)
-   if(!article||article.deletedAt||article.ownerId!==parsed.ownerId||article.contentHtml!==source.contentHtml)throw new Error('Bài đọc đã thay đổi hoặc không còn tồn tại. Hãy chọn lại đoạn ngữ pháp.')
+   if(source.sourceKind==='shadowing'){
+    const lesson=await account.shadowingLessons.get(source.articleId)
+    const html=lesson?'<p>'+lesson.referenceText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</p>':''
+    if(!lesson||lesson.ownerId!==parsed.ownerId||html!==source.contentHtml)throw new Error('Bài shadowing đã thay đổi hoặc không còn tồn tại. Hãy chọn lại đoạn ngữ pháp.')
+   }else if(source.sourceKind==='page'){
+    if(!source.sourcePath)throw new Error('Thiếu đường dẫn nguồn ngữ pháp.')
+   }else{
+    const article=await account.readingArticles.get(source.articleId)
+    if(!article||article.deletedAt||article.ownerId!==parsed.ownerId||article.contentHtml!==source.contentHtml)throw new Error('Bài đọc đã thay đổi hoặc không còn tồn tại. Hãy chọn lại đoạn ngữ pháp.')
+   }
    if(source.end-source.start!==source.quote.length||source.highlights.some(range=>range.start<source.start||range.end>source.end||range.end<=range.start))throw new Error('Vị trí tô sáng không hợp lệ.')
   }
   if(previous&&previous.ownerId!==parsed.ownerId)throw new Error('Không có quyền sửa cấu trúc này.')
@@ -102,6 +111,22 @@ export async function moveGrammarItem(table:'grammarFolders'|'grammarEntries',id
   for(const [sortOrder,row] of siblings.entries())if(row.sortOrder!==sortOrder){
    await account[table].update(row.id,{sortOrder,updatedAt})
   }
+  return true
+ })
+}
+
+// Detach one occurrence without removing the grammar card or its other sources.
+export async function removeGrammarHighlight(id:string,ownerId:string,source:GrammarSource,account:VocabDatabase=db){
+ return account.transaction('rw',account.grammarEntries,async()=>{
+  const current=await account.grammarEntries.get(id)
+  if(!current||current.ownerId!==ownerId)throw new Error('Không có quyền bỏ highlight ngữ pháp này.')
+  const same=(saved:GrammarSource)=> (saved.sourceKind??'reading')===(source.sourceKind??'reading')&&saved.articleId===source.articleId&&saved.contentHtml===source.contentHtml&&saved.start===source.start&&saved.end===source.end&&saved.quote===source.quote&&(saved.sourcePath??'')===(source.sourcePath??'')
+  const next={...current,sources:current.sources?.filter(saved=>!same(saved))}
+  const removedPrimary=!!current.source&&same(current.source)
+  if(removedPrimary)delete next.source
+  if(!removedPrimary&&(next.sources?.length??0)===(current.sources?.length??0))return false
+  next.updatedAt=new Date().toISOString()
+  await account.grammarEntries.put(next)
   return true
  })
 }

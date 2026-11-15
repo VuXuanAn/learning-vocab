@@ -10,7 +10,7 @@ import { grammarEditorExtensions } from './grammar-editor-extensions'
 const fonts=[['','Font mặc định'],['Arial','Arial'],['Times New Roman','Times New Roman'],['Georgia','Georgia'],['Verdana','Verdana'],['Tahoma','Tahoma'],['Courier New','Courier New']]
 const colorHex=(value:string|undefined,fallback:string)=>{if(/^#[a-f\d]{6}$/i.test(value??''))return value!;const rgb=value?.match(/^rgb\(\s*(\d+)[, ]+\s*(\d+)[, ]+\s*(\d+)\s*\)$/i);return rgb?'#'+rgb.slice(1).map(channel=>Math.min(255,Number(channel)).toString(16).padStart(2,'0')).join(''):fallback}
 const sizes=['12','14','16','18','20','24','28','32','36','48','64']
-export default function GrammarTextEditor({value,onChange,disabled=false}:{value:string;onChange:(html:string)=>void;disabled?:boolean}) {
+export default function GrammarTextEditor({value,onChange,disabled=false,label='Nội dung ngữ pháp',editorId='grammar-html'}:{value:string;onChange:(html:string)=>void;disabled?:boolean;label?:string;editorId?:string}) {
  const toolsId=useId()
  const lastValue=useRef(value),imageInput=useRef<HTMLInputElement>(null)
  const [expanded,setExpanded]=useState(false),[toolsOpen,setToolsOpen]=useState(false)
@@ -21,7 +21,7 @@ export default function GrammarTextEditor({value,onChange,disabled=false}:{value
  const [imageLoading,setImageLoading]=useState(false)
  const editor=useEditor({
   extensions:grammarEditorExtensions(),content:prepareGrammarHtml(value),immediatelyRender:false,shouldRerenderOnTransaction:true,editable:!disabled,
-  editorProps:{attributes:{id:'grammar-html',role:'textbox','aria-label':'Nội dung ngữ pháp','aria-multiline':'true',class:'grammar-text-editor grammar-rich-content reading-content min-h-80 break-words p-5 outline-none'},transformPastedHTML:cleanGrammarHtml},
+  editorProps:{attributes:{id:editorId,role:'textbox','aria-label':label,'aria-multiline':'true',class:'grammar-text-editor grammar-rich-content reading-content min-h-80 break-words p-5 outline-none'},transformPastedHTML:cleanGrammarHtml},
   onUpdate:({editor})=>{const html=editor.isEmpty?'':editor.getHTML();lastValue.current=html;onChange(html)},
  })
  useEffect(()=>{if(!editor||value===lastValue.current)return;lastValue.current=value;editor.commands.setContent(prepareGrammarHtml(value),{emitUpdate:false})},[editor,value])

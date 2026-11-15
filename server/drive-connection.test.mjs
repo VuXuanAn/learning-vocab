@@ -74,3 +74,41 @@ test('missing provider token during validation does not cancel the pending Drive
  wait.resolve();await pending
  assert.equal(calls,1);assert.equal(store.getState().ready,true);assert.equal(store.getState().checking,false)
 })
+
+test('tab reload restores a cached token only after Drive validates it again',async()=>{
+ const memory=new Map(),calls=[]
+ const cache={read:id=>memory.get(id)??'',write:(id,token)=>memory.set(id,token),clear:id=>memory.delete(id)}
+ const history={wasLinked:()=>false,rememberLinked:()=>{}}
+ const first=createDriveConnectionStore(async token=>{calls.push(token)},history,cache)
+ await first.getState().initialize('a','drive-token')
+ assert.equal(memory.get('a'),'drive-token')
+ const wait=deferred()
+ const reopened=createDriveConnectionStore(async token=>{calls.push(token);await wait.promise},history,cache)
+ const checking=reopened.getState().initialize('a','')
+ assert.equal(reopened.getState().ready,false)
+ assert.equal(reopened.getState().checking,true)
+ wait.resolve();await checking
+ assert.equal(reopened.getState().ready,true)
+ assert.equal(reopened.getState().accessToken,'drive-token')
+ assert.deepEqual(calls,['drive-token','drive-token'])
+ reopened.getState().invalidate('Expired')
+ assert.equal(memory.has('a'),false)
+})
+test('expired cached tokens are removed and tokens never cross accounts or survive logout',async()=>{
+ const memory=new Map([['a','expired']]),seen=[]
+ const cache={read:id=>memory.get(id)??'',write:(id,token)=>memory.set(id,token),clear:id=>memory.delete(id)}
+ const history={wasLinked:()=>true,rememberLinked:()=>{}}
+ const store=createDriveConnectionStore(async token=>{seen.push(token);if(token==='expired')throw new Error('Expired [401]')},history,cache)
+ await store.getState().initialize('a','')
+ assert.equal(store.getState().ready,false)
+ assert.equal(memory.has('a'),false)
+ await store.getState().initialize('a','valid',true)
+ await store.getState().initialize('b','')
+ assert.equal(memory.has('a'),false)
+ assert.equal(store.getState().accessToken,'')
+ assert.deepEqual(seen,['expired','valid'])
+ await store.getState().initialize('b','valid-b')
+ store.getState().reset()
+ assert.equal(memory.size,0)
+ assert.equal(store.getState().ready,false)
+})

@@ -1,4 +1,4 @@
-﻿import test from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {stripTypeScriptTypes} from 'node:module'
@@ -7,7 +7,7 @@ const url=s=>'data:text/javascript;base64,'+Buffer.from(stripTypeScriptTypes(s))
 const templatesUrl=url(read('templates'))
 const cardsUrl=url(read('cards').replace("'./templates'",JSON.stringify(templatesUrl)))
 const meaningUrl=url(read('meaning-quiz').replace("'./cards'",JSON.stringify(cardsUrl)))
-const {typedTarget,checkTypedAnswer}=await import(url(read('typed-answer').replace("'./meaning-quiz'",JSON.stringify(meaningUrl))))
+const {typedTarget,spellingTarget,checkTypedAnswer}=await import(url(read('typed-answer').replace("'./meaning-quiz'",JSON.stringify(meaningUrl))))
 const {generateCards}=await import(cardsUrl)
 const {aiTemplate}=await import(url(read('ai-batch')))
 const {studyCard}=await import(url(read('study-direction').replace("'./cards'",JSON.stringify(cardsUrl)).replace("'./templates'",JSON.stringify(templatesUrl))))
@@ -59,3 +59,21 @@ test('custom templates without semantic fields are not guessed and apostrophes n
  assert.equal(typedTarget(note,generateCards(ai)[0],false),null)
  assert.equal(checkTypedAnswer('don’t give up',{kind:'word',expected:"don't give up"}),true)
 })
+
+ test('spelling practice is independent from the answer direction',()=>{
+  const note={...ai,front:'Friday',values:{'Từ vựng':'Friday','Nghĩa tiếng Việt':'Thứ Sáu'}}
+  for(const reversed of [false,true]){
+   const card=studyCard(note,generateCards(note)[0],reversed)
+   const answer=typedTarget(note,card,reversed)
+   assert.equal(checkTypedAnswer(reversed?'Friday':'Thứ Sáu',answer),true)
+   assert.equal(checkTypedAnswer(reversed?'Thứ Sáu':'Friday',answer),false)
+   const practice=spellingTarget(note)
+   assert.equal(checkTypedAnswer(' Friday! ',practice),true)
+   assert.equal(checkTypedAnswer('Frday',practice),false)
+   assert.equal(checkTypedAnswer('Thứ Sáu',practice),false)
+  }
+ })
+ test('basic spelling practice uses the original front and skips unstructured cloze',()=>{
+  assert.deepEqual(spellingTarget({kind:'reverse',front:'speak',back:'nói'}),{kind:'word',expected:'speak'})
+  assert.equal(spellingTarget({kind:'cloze',front:'{{c1::hello}}'}),null)
+ })

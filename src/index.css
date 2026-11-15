@@ -269,14 +269,15 @@ input.grammar-assignment-radio {
 .grammar-text-editor ol { list-style: decimal; padding-left: 1.5em; }
 .grammar-text-editor ul { list-style: disc; padding-left: 1.5em; }
 .grammar-text-editor li p { margin: 0; }
-.grammar-text-editor table { width: 100%; table-layout: fixed; display: table; }
-.grammar-text-editor td, .grammar-text-editor th { position: relative; min-width: 60px; vertical-align: top; }
-.grammar-text-editor th { font-weight: 600; background: #f1f5f9; }
+.grammar-text-editor td, .grammar-text-editor th { position: relative; }
 .grammar-text-editor .selectedCell { background: #d1fae5; }
 .grammar-text-editor code { border-radius: .25rem; background: #f1f5f9; padding: .1em .3em; }
 
 /* Shared rich grammar styles apply in the editor, preview and saved content. */
 .grammar-rich-content { white-space: pre-wrap; }
+.grammar-rich-content table { display: table; width: 100%; max-width: 100%; table-layout: fixed; border-collapse: collapse; font-size: .875rem; line-height: 1.9; }
+.grammar-rich-content td, .grammar-rich-content th { min-width: 60px; vertical-align: top; border: 1px solid #e2e8f0; padding: .5em .8em; overflow-wrap: anywhere; }
+.grammar-rich-content th { font-weight: 600; background: #f1f5f9; }
 .grammar-rich-content h5, .grammar-rich-content h6 { font-weight: 650; margin: 1em 0 .6em; }
 .grammar-rich-content img { display: block; max-width: 100%; height: auto; margin: 1em 0; border-radius: .5rem; }
 .grammar-rich-content ul[data-type="taskList"] { list-style: none; padding-left: 0; }
@@ -327,3 +328,11 @@ input.grammar-assignment-radio {
 @media (max-height: 700px) {
  .grammar-dialog [data-slot="dialog-description"] { display: none; }
 }
+
+.grammar-card-content .grammar-rich-content > :first-child { margin-top: 0; }
+
+::highlight(grammar-source) { background-color: #fef08a; color: #334155; text-decoration: underline; }
+
+/* A warm sheet for free-form sentence analysis, with the shared formatting tools. */
+.scratchpad-paper .grammar-text-editor { background: #fffef7; min-height: 100%; padding: 1.5rem; }
+.scratchpad-paper > div { flex: 1 1 0%; min-height: 0; }

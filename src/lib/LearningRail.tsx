@@ -4,9 +4,17 @@ import { Sparkles } from 'lucide-react'
 import { db } from './db'
 import { meaningQuestions } from './meaning-quiz'
 import SpeakButton from './SpeakButton'
-import VocabularyLookup from './VocabularyLookup'
+import { useLayoutSettings } from './settings'
 
 export default function LearningRail() {
+ const visible = useLayoutSettings(state => state.reviewCornerVisible)
+ if (!visible) return null
+ return <aside aria-label="Góc ôn tập" className="learning-rail">
+  <ReviewCorner/>
+ </aside>
+}
+
+function ReviewCorner() {
  const data = useLiveQuery(async () => {
   const [notes, reviews] = await Promise.all([
    db.notes.toArray(), db.reviews.toArray(),
@@ -31,8 +39,7 @@ export default function LearningRail() {
   return () => window.clearInterval(timer)
  }, [])
  const item = pool[Math.min(pool.length - 1, Math.floor(choice * pool.length))]
- return <aside aria-label="Tra từ và ôn tập" className="learning-rail">
-  <VocabularyLookup/>
+ return <>
   <div className="flex items-center gap-2 text-emerald-800"><Sparkles size={18}/><h2 className="font-semibold">Góc ôn tập</h2></div>
   <p className="mt-2 text-xs leading-5 text-slate-500">Từ vựng Quên / Khó · đổi mỗi 10 giây</p>
   {!data ? <p className="mt-6 text-sm text-slate-500">Đang tải…</p> : !item ? <div className="mt-6 rounded-xl border border-dashed border-slate-200 p-4 text-sm leading-6 text-slate-500">Đánh giá từ vựng là Quên / Khó để ôn tại đây.</div> : <article key={item.id} className="mt-5 min-w-0 rounded-2xl border border-emerald-100 bg-white p-4 shadow-sm">
@@ -43,5 +50,5 @@ export default function LearningRail() {
     <p className="mt-4 whitespace-pre-wrap break-words font-medium text-slate-700">{item.question.meaning}</p>
     {item.question.example&&<div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-6"><p className="whitespace-pre-wrap break-words text-slate-700">{item.question.example}</p>{item.question.exampleTranslation&&<p className="mt-2 whitespace-pre-wrap break-words text-slate-500">{item.question.exampleTranslation}</p>}</div>}
   </article>}
- </aside>
+ </>
 }
