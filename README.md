@@ -14,6 +14,18 @@ npm run lint
 
 Trên PowerShell nếu npm.ps1 bị chặn, dùng npm.cmd thay cho npm.
 
+## Cài ứng dụng PWA
+
+Chạy `npm run build` rồi `npm run preview` để thử PWA tại `http://localhost:4173`. Service worker chỉ bật ở bản build; `npm run dev` không bật cache PWA. Khi triển khai lên máy chủ, cần dùng HTTPS.
+
+- Chrome/Edge trên máy tính hoặc Android: bấm **Cài ứng dụng** khi thông báo xuất hiện, hoặc chọn cài đặt trong menu trình duyệt.
+- iPhone/iPad: mở bằng Safari → Chia sẻ → **Thêm vào Màn hình chính**.
+- Khi có phiên bản mới, ứng dụng hiện **Cập nhật**. Lưu nội dung đang nhập rồi bấm nút để tải lại; chọn **Để sau** để tiếp tục phiên hiện tại.
+
+Service worker lưu giao diện, mã ứng dụng và font sau lần tải thành công. Có thể mở lại giao diện khi mất mạng; dữ liệu học sẵn có vẫn dùng cơ chế IndexedDB của từng tài khoản. Đăng nhập mới, làm mới phiên đăng nhập, AI, Google Drive và đồng bộ Supabase cần mạng; PWA không bổ sung hàng đợi đồng bộ offline. API, token, dữ liệu tài khoản và audio không được đưa vào cache của service worker.
+
+Cấu hình manifest/cache nằm ở `vite.config.ts`, giao diện cài đặt/cập nhật ở `src/lib/PwaPrompt.tsx`. Biểu tượng sách dùng cùng màu emerald với giao diện, gồm PNG 192/512px, bản maskable 512px và Apple touch icon 180px. Vercel đã được cấu hình kiểm tra lại `sw.js` và manifest khi tải.
+
 ## Thư viện đã cài
 
 - React Router: định tuyến.
